@@ -411,7 +411,9 @@ gplt.scatter <- function(data, x, y='NULL', w='NULL',
       # for line plots, make up a constant y coordinate
       data[['.y_const']] <- 1
       y <- '.y_const'
-      num.y <- TRUE
+      # treat as factor
+      num.y <- FALSE
+      flip=TRUE
    } else {
       num.y <- is.numeric(data[[y]])
       if (num.x && (!num.y)) {
@@ -447,16 +449,12 @@ gplt.scatter <- function(data, x, y='NULL', w='NULL',
    }
 
    # dodging
-#    if (num.x && (!num.y)) {
-#       # note: does not work without specifying offset explicitly
-#       # position_dogev is defined in this file
-#       pos <- plotluck:::position_dodgev(height=0.9)
-#    } else if ((!num.x) && num.y) {
-#       pos <- position_dodge(width=0.9)
-#    } else {
-#       pos <- NULL
-#    }
-   pos <- position_dodge(width=0.9)
+
+   if (y == '.y_const') {
+      pos <- NULL
+   } else {
+      pos <- position_dodge(width=0.9)
+   }
 
    if (convert.duplicates.to.weights) {
       p <- p + geom_point(alpha=0.6,
@@ -486,10 +484,6 @@ gplt.scatter <- function(data, x, y='NULL', w='NULL',
          }
       }
 
-      if (y == '.y_const') {
-         w.jitter <- 0
-         h.jitter <- 1
-      }
       p <- p + geom_point(alpha=0.6, position=position_jitter(width=w.jitter, height=h.jitter), ...)
    }
 
@@ -1154,7 +1148,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       }
    }
 
-   trans       <- list('NULL'=NULL)
+   trans       <- list('NULL'=identity_trans())
    is.num      <- list('NULL'=FALSE)
    is.ord      <- list('NULL'=FALSE)
    uniq        <- list('NULL'=0)
@@ -1215,7 +1209,8 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
    }
 
    vars.covered <- intersect(c(x,y), vars.non.null) # the variables reflected in the plot
-   color.usable <- TRUE # can we color the plot to reflect additional variables?
+   color.usable <- TRUE  # can we color the plot to reflect additional variables?
+   flip         <- FALSE # for num/factor scatter plots, we need to apply coord_flip(), see below
 
    if (grid.xy) {
       p <- gplt.heat(data, x, y, z, w,
@@ -1294,14 +1289,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
                               min.points.jitter=opts$min.points.jitter, ...)
             # HACK: ggplot2 does not implement vertical dodging, therefore we
             # use coord_flip() as a workaround; see code for gplt.scatter
-            # swap axes fields
-            tmp         <- is.num[[x]]
-            is.num[[x]] <- is.num[[y]]
-            is.num[[y]] <- tmp
-
-            tmp        <- trans[[x]]
-            trans[[x]] <- trans[[y]]
-            trans[[y]] <- tmp
+            flip <- TRUE
 
             tmp              <- title.label[[x]]
             title.label[[x]] <- title.label[[y]]
@@ -1312,6 +1300,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
          type.plot <- 'bar'
          color.usable <- FALSE
          vars.covered <- x
+         is.num[[y]] <- TRUE
          p <- gplt.bar(data, x, w, alpha=opts$alpha.default, ...)
       } else if ((!is.num[[x]]) && is.num[[y]]) {
          if (n.max.level > opts$min.points.box) {
@@ -1452,28 +1441,56 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
 
    # labels
    p <- p + xlab(title.label[[x]]) +
-      ylab(title.label[[y]]) +
+      ylab(title.label[[y]])
+   if (z != 'NULL') {
       labs(title=title.label[[z]])
+   }
 
    # for factors, write horizontal axis labels at an angle to avoid clutter
    if (type.plot %in% c('box', 'bar', 'scatter.fact.num', 'spine')) {
       p <- p + opts$theme.axis.x.factor
    }
 
+   # note: coord_flip() changes the scales and labels are along with the coordinates,
+   # but not the grid orientation and axis text properties
+
    # axis scaling
+   if (!flip) {
+      if (is.num[[x]]) {
+         p <- p + scale_x_continuous(trans=trans[[x]])
+      }
+      if (is.num[[y]]) {
+         p <- p + scale_y_continuous(trans=trans[[y]])
+      }
+   } else {
+      if (is.num[[x]]) {
+         p <- p + scale_y_continuous(trans=trans[[x]])
+      }
+      if (is.num[[y]]) {
+         p <- p + scale_x_continuous(trans=trans[[y]])
+      }
+   }
+
+   # points on the grid line are hard to see; remove grid line for factors
    if (is.num[[x]]) {
-      p <- p + scale_x_continuous(trans=trans[[x]])
+      p <- p + theme(panel.grid.major.x=element_line(color='black', linetype='dotted'),
+               panel.grid.minor.x=element_line(color='black',linetype='dotted'))
+   } else {
+      p <- p + theme(panel.grid.major.x=element_blank(),
+                     panel.grid.minor.x=element_blank())
    }
 
    if (is.num[[y]]) {
-      p <- p + scale_y_continuous(trans=trans[[y]])
+      p <- p + theme(panel.grid.major.y=element_line(color='black', linetype='dotted'),
+               panel.grid.minor.y=element_line(color='black',linetype='dotted'))
+   } else {
+      p <- p + theme(panel.grid.major.y=element_blank(),
+                     panel.grid.minor.y=element_blank())
    }
 
    p <- p + theme(panel.background=element_blank(), # get rid of gray background
                   axis.line=element_line(color='black'),
                   panel.grid=element_line(color='black'),
-                  panel.grid.major=element_line(color='black', linetype='dotted'),
-                  panel.grid.minor=element_line(color='black',linetype='dotted'),
                   legend.position='bottom') # use maximum area for actual plot
 
    return(p)

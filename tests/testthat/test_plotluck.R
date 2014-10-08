@@ -1,4 +1,3 @@
-context("Regression Tests")
 
 # convenience functions
 
@@ -6,9 +5,11 @@ context("Regression Tests")
 .prefix <- 'test'
 
 # set to TRUE to visually inspect all tests
-.debug <- FALSE
+.debug <- TRUE
 
 if (!.debug) {
+   context("Regression Tests")
+
    test_that_ref <- function(prefix, desc, code) {
       .prefix <<- prefix
       .file.cnt <<- 0
@@ -50,7 +51,7 @@ test_that_ref("1d_density", "1D density plot", {
 })
 
 test_that_ref("1d_scatter", "1D scatter num/fact", {
-   #eq_ref(plotluck(iris, Petal.Length, opts=plotluck.options(min.points.density=1E20)))
+   eq_ref(plotluck(iris, Petal.Length, opts=plotluck.options(min.points.density=1E20)))
    # with jitter
    eq_ref(plotluck(iris, Petal.Length, opts=plotluck.options(min.points.density=1E20, convert.duplicates.to.weights=FALSE)))
 })

@@ -124,11 +124,13 @@ bar plots.
 
 \section{Missing values}{
  Typically, missing (\code{NA}) values in factors are
- ignored. If you want to make these explicit, make it a separate level using
- the \code{exclude} option in \code{\link{factor}}. In this case,
- \code{plotluck} will respect these levels. You can also explicitly set the
- exclude handling using the option \code{exclude.factor}, with the same
- semantics as in function \code{factor()}.
+ ignored. To make these explicit, create a separate level using the
+ \code{exclude} option in \code{\link{factor}}. In this case, \code{plotluck}
+ will respect these levels. You can also explicitly set the exclude handling
+ using the option \code{exclude.factor}, with the same semantics as in
+ function \code{factor()}.
+
+ Missing values in numeric variables are ignored.
 }
 
 \section{Sampling}{
