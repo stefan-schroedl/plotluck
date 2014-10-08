@@ -834,6 +834,8 @@ plotluck.options <- function(...) {
 #' @export
 #'@keywords hplot, aplot, dplot
 #'@concept automation
+#'@concept visualization
+#'@concept plotting
 #'@concept exploratory data analyis
 #'@concept ggplot
 #'@concept ggplot2

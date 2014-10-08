@@ -4,10 +4,9 @@
 .file.cnt <- 0
 .prefix <- 'test'
 
-# set to TRUE to visually inspect all tests
-.debug <- TRUE
+# set .debug to TRUE to visually inspect all tests
 
-if (!.debug) {
+if (!exists('.debug') || !.debug) {
    context("Regression Tests")
 
    test_that_ref <- function(prefix, desc, code) {
