@@ -535,7 +535,7 @@ gplt.heat <- function(data, x, y, z, w='NULL', ...) {
 
    p <- ggplot(means, aes_string(x=x, y=y, fill=z)) +
       geom_tile(color='black', ...) +
-      scale_fill_gradientn(colours=rainbow(2))
+      scale_fill_gradientn(colours=rev(rainbow(2)))
    return(p)
 }
 
@@ -720,7 +720,7 @@ gplt.hex <- function(data, x, y, w='NULL', ...) {
       geom_hex(...) +
       geom_smooth() +
       # log scaling of color often reveals more details
-      scale_fill_gradientn(colours=rainbow(2), trans='log')
+      scale_fill_gradientn(colours=rev(rainbow(2)), trans='log')
    return(p)
 }
 
@@ -1545,8 +1545,6 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
 plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL, in.grid=TRUE,
                            opts=plotluck.options(), ...) {
 
-   opts$convert.duplicates.to.weights <- FALSE # slow
-
    x <- deparse(substitute(x))
    y <- deparse(substitute(y))
    w <- deparse(substitute(w))
@@ -1611,6 +1609,14 @@ plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL, in.grid=TRUE,
          panel.grid.minor=element_blank())"
 
       theme.multi <- gsub('\\s','', theme.multi)
+
+      # slow and hardly visible
+      opts$convert.duplicates.to.weights <- FALSE
+
+      # use the limited space to make subgraphs
+      # relatively rectangular
+      opts$max.facets.row <- NULL
+      opts$max.facets.row <- NULL
 
       x.fixed <- (x != 'all' && x != 'NULL')
       y.fixed <- (y != 'all' && y != 'NULL')
