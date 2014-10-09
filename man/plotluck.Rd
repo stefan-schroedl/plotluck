@@ -167,8 +167,8 @@ bar plots.
  Nevertheless, the defaults can be overriden by changing options
  \code{use.geom.violin} and \code{use.geom.density}.
 
- Pie charts are not supported, as their flaws have been widely documented;
- see e.g., \code{\link{pie}}.
+ Due to their well-documented problematic aspects, pie charts and stacked bar
+ graphs are not supported.
 
  Cleveland's Dot Plots (\code{\link{dotchart}}) can be produced as a special
  case of scatter plots.
@@ -256,6 +256,10 @@ plotluck(as.data.frame(Titanic), Class, Sex, Survived, w=Freq)
 }
 \concept{
 automation
+
+visualization
+
+plotting
 
 exploratory data analyis
 

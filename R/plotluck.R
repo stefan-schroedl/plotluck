@@ -976,8 +976,8 @@ plotluck.options <- function(...) {
 #'  Nevertheless, the defaults can be overriden by changing options
 #'  \code{use.geom.violin} and \code{use.geom.density}.
 #'
-#'  Pie charts are not supported, as their flaws have been widely documented;
-#'  see e.g., \code{\link{pie}}.
+#'  Due to their well-documented problematic aspects, pie charts and stacked bar
+#'  graphs are not supported.
 #'
 #'  Cleveland's Dot Plots (\code{\link{dotchart}}) can be produced as a special
 #'  case of scatter plots.
@@ -1536,13 +1536,13 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
 #' plotluck.multi(iris)
 #'
 #' # 2D dependencies with one fixed variable on horizontal axis
-#' plotluck.multi(iris, Species, y=all)
+#' p<-plotluck.multi(iris, Species)
 #'
 #'#' # 2D dependencies with one fixed variable on horizontal axis
-#' plotluck.multi(iris, x=all, Species)
+#' p<-plotluck.multi(iris, all, Species)
 #'
 #'
-plotluck.multi <- function(data, x=all, y=NULL, w=NULL, in.grid=TRUE,
+plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL, in.grid=TRUE,
                            opts=plotluck.options(), ...) {
 
    opts$convert.duplicates.to.weights <- FALSE # slow
@@ -1551,8 +1551,21 @@ plotluck.multi <- function(data, x=all, y=NULL, w=NULL, in.grid=TRUE,
    y <- deparse(substitute(y))
    w <- deparse(substitute(w))
 
-   if (x == 'NULL' && y == 'NULL') {
-      stop('At least one of arguments x and y needs to be specified')
+   if (x != 'all' && x != 'NULL' &&
+          y != 'all' && y != 'NULL') {
+      stop('at least one of x or y must be "all"')
+   }
+
+   if (x == 'NULL') {
+      if (y == 'NULL') {
+         x <- 'all'
+      } else if (y != 'all') {
+         x <- 'all'
+      }
+   } else if (y == 'NULL') {
+      if (x != 'all') {
+         y <- 'all'
+      }
    }
 
    vars <- list()
@@ -1630,7 +1643,14 @@ plotluck.multi <- function(data, x=all, y=NULL, w=NULL, in.grid=TRUE,
    return(ret)
 }
 
+# HACK to avoid 'Error: could not find function "ggplotGrob"'
+#'@export
+ggplotGrob <- function (x) {
+   ggplot2::ggplot_gtable(ggplot2::ggplot_build(x))
+}
 
+
+#'@export
 print.plotluck_multi <- function(x, ...) {
    if (x$in.grid) {
       do.call(function(...) grid.arrange(main=x$main, ...), x$plots)

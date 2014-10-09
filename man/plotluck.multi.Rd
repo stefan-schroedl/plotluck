@@ -3,7 +3,7 @@
 \alias{plotluck.multi}
 \title{Create several plots at once with \code{plotluck}}
 \usage{
-plotluck.multi(data, x = all, y = NULL, w = NULL, in.grid = TRUE,
+plotluck.multi(data, x = NULL, y = NULL, w = NULL, in.grid = TRUE,
   opts = plotluck.options(), ...)
 }
 \arguments{
@@ -51,10 +51,10 @@ data(iris)
 plotluck.multi(iris)
 
 # 2D dependencies with one fixed variable on horizontal axis
-plotluck.multi(iris, Species, y=all)
+p<-plotluck.multi(iris, Species)
 
 #' # 2D dependencies with one fixed variable on horizontal axis
-plotluck.multi(iris, x=all, Species)
+p<-plotluck.multi(iris, all, Species)
 }
 \seealso{
 \code{\link{plotluck}}

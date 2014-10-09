@@ -285,3 +285,12 @@ test_that_ref("2d_weight", "instance weights", {
    eq_ref(plotluck(df, Var1, Var2, v, w=w))
 
 })
+
+test_that_ref("multi", "multiple plots", {
+   eq_ref(plotluck.multi(diamonds))
+
+   eq_ref(plotluck.multi(diamonds, price))
+
+   eq_ref(plotluck.multi(diamonds, y=price))
+
+})
