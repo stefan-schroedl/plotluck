@@ -320,6 +320,35 @@ preprocess.factors <- function(data, x, w='NULL',
    return(x.data)
 }
 
+# determine number of histogram bins
+# note: this is a modification the nclass.FD function, which sometimes returns '1'
+# for very uneven distributions.
+
+nclass.FD.modified <- function(x, max.bins=200) {
+   u <- unique(x)
+   if (length(u) == 1) {
+      # only one value
+      return(1L)
+   }
+   # minimum reasonable bin size
+   h <- 0.5 * min(abs(diff(u)))
+
+   # for very few unique values, show all of them individually
+   if (length(u) > 10) {
+      h2 <- 2 * stats::IQR(x)
+      if (h2 == 0)
+         h2 <- 2 * stats::mad(x, constant=2)
+      if (h2 > 0)
+         h <- max(h, h2 * length(x)^(-1/3))
+   }
+
+   # capping the number of bins, since for some features the estimated bins are very high causing the hist() function to throw an error
+   num.bins <- ceiling(diff(range(u))/h)
+   num.bins <- min(max.bins,
+                   max(min(5, length(u), max.bins, length(x)/log2(length(x))),
+                       num.bins))
+   num.bins
+}
 
 # break a numeric variable into intervals
 # - method=quantile - bins with equal number of samples
@@ -348,14 +377,8 @@ discretize <- function(data, x, w='NULL',
                                 probs=seq(0,max.breaks)/max.breaks, na.rm=TRUE, normwt=TRUE)
       }
    } else {
-      breaks <- hist(x, plot=FALSE)$breaks
-      n.breaks <- length(breaks)
-      n.breaks <- min(n.breaks, max.breaks)
-      min.breaks <- min(max.breaks, max(5, length(x.data)/10))
-      n.breaks <- max(n.breaks, min.breaks)
-      if (n.breaks != length(breaks)) {
-         breaks <- hist(x.data, breaks=n.breaks, plot=FALSE)$breaks
-      }
+      n.breaks <- nclass.FD.modified(x.data, max.breaks)
+      breaks <- hist(x.data, breaks=n.breaks, plot=FALSE)$breaks
    }
 
    return(ordered(cut(x.data, breaks=unique(breaks), include.lowest=TRUE)))
@@ -700,7 +723,9 @@ gplt.box <- function(data, x, y, w='NULL', med='NULL', use.geom.violin=TRUE, ...
 
 # density plot with overlayed vertical median lines
 gplt.density <- function(data, x, w='NULL', med='NULL',
-                         use.geom.density=TRUE, ...) {
+                         use.geom.density=TRUE,
+                         n.breaks.histogram=NA,
+                         ...) {
    p <- ggplot(data, aes_string(x=x, weight=w))
    if (use.geom.density) {
       p <- p + geom_density(aes(y=..scaled..), adjust=0.5, trim=TRUE, na.rm=TRUE, ...)
@@ -709,8 +734,19 @@ gplt.density <- function(data, x, w='NULL', med='NULL',
       if (med != 'NULL') {
          p <- p + stat_vline(aes_string(x=med), xintercept='mean', lwd=1)
       }
+
+      # density numbers themselves not very meaningful
+      p <- p + theme(axis.ticks.y=element_blank(),
+                     axis.text.y=element_blank())
+
    } else {
-      p <- p + geom_histogram(color='black', ...)
+      if (is.numeric(n.breaks.histogram)) {
+         n.breaks <- n.breaks.histogram
+      } else {
+         n.breaks <- nclass.FD.modified(data[[x]])
+      }
+      bin.width <- diff(range(data[[x]], na.rm=TRUE))/n.breaks
+      p <- p + geom_histogram(binwidth=bin.width, ...)
    }
 
    return(p)
@@ -805,6 +841,7 @@ plotluck.options <- function(...) {
       use.geom.violin=TRUE,
       max.levels.violin=20,
       use.geom.density=TRUE,
+      n.breaks.histogram=NA,
       max.facets.column=10,
       max.facets.row=10,
       exclude.factor=NULL,
@@ -972,15 +1009,17 @@ plotluck.options <- function(...) {
 #'
 #'@section Remarks on the choice of plot types: By default, \code{plotluck} uses
 #'  violin and density plots in place of the more traditional box-and-whisker
-#'  plots and histograms. The author feels that these convey the shape of a
-#'  distribution better: in the former case, summary statistics like mean and
-#'  quantiles are less useful if the distribution is not unimodal. A wrong
+#'  plots and histograms; these modern graph types convey the shape of a
+#'  distribution better. In the former case, summary statistics like mean and
+#'  quantiles are less useful if the distribution is not unimodal; a wrong
 #'  choice of the number of bins of a histogram can create misleading artifacts.
 #'
 #'  If the resulting graph would contain too many (more than
 #'  \code{max.levels.violin}) violin plots in a row, the algorithm switches to
 #'  box plots. The defaults can also be directly overriden by changing options
-#'  \code{use.geom.violin} and \code{use.geom.density}.
+#'  \code{use.geom.violin} and \code{use.geom.density}. The number of bins of a
+#'  histogram can be customized with \code{n.breaks.histogram}. The default
+#'  setting, \code{NA}, applies a heuristic estimate.
 #'
 #'  Due to their well-documented problematic aspects, pie charts and stacked bar
 #'  graphs are not supported.
@@ -1256,13 +1295,15 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       }
 
       # compute joint number of factor combinations, and
-      # and the maximum number of instances in them
+      # and the maximum/median number of instances in them
       if (length(vars.non.numeric) > 0) {
          t <- table(data[,vars.non.numeric], exclude=exclude.factor)
          num.level   <- length(t)
+         n.med.level <- median(t)
          n.max.level <- max(t)
       } else {
          num.level <- 1
+         n.med.level <- nrow(data)
          n.max.level <- nrow(data)
       }
 
@@ -1284,7 +1325,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
          }
       } else if (is.num[[x]] && (!is.num[[y]])) {
 
-         if (n.max.level > opts$min.points.density) {
+         if (n.med.level > opts$min.points.density) {
             type.plot <- 'density'
             vars.covered <- x
             if (opts$use.geom.density == TRUE) {
@@ -1304,6 +1345,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
 
             p <- gplt.density(data, x, w=w, med='.med.',
                               use.geom.density=opts$use.geom.density,
+                              n.breaks.histogram=opts$n.breaks.histogram,
                               alpha=opts$alpha.default, ...)
          } else {
             # not enough points for density plot
@@ -1334,7 +1376,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
 
          p <- gplt.bar(data, x, w, alpha=opts$alpha.default, ...)
       } else if ((!is.num[[x]]) && is.num[[y]]) {
-         if (n.max.level > opts$min.points.box) {
+         if (n.med.level > opts$min.points.box) {
             type.plot <- 'box'
 
             # if there are too many violin plots in a horizontal row, they

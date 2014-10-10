@@ -159,15 +159,17 @@ bar plots.
 \section{Remarks on the choice of plot types}{
  By default, \code{plotluck} uses
  violin and density plots in place of the more traditional box-and-whisker
- plots and histograms. The author feels that these convey the shape of a
- distribution better: in the former case, summary statistics like mean and
- quantiles are less useful if the distribution is not unimodal. A wrong
+ plots and histograms; these modern graph types convey the shape of a
+ distribution better. In the former case, summary statistics like mean and
+ quantiles are less useful if the distribution is not unimodal; a wrong
  choice of the number of bins of a histogram can create misleading artifacts.
 
  If the resulting graph would contain too many (more than
  \code{max.levels.violin}) violin plots in a row, the algorithm switches to
  box plots. The defaults can also be directly overriden by changing options
- \code{use.geom.violin} and \code{use.geom.density}.
+ \code{use.geom.violin} and \code{use.geom.density}. The number of bins of a
+ histogram can be customized with \code{n.breaks.histogram}. The default
+ setting, \code{NA}, applies a heuristic estimate.
 
  Due to their well-documented problematic aspects, pie charts and stacked bar
  graphs are not supported.
