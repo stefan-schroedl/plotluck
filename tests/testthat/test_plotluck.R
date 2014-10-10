@@ -6,7 +6,7 @@
 
 # set .debug to TRUE to visually inspect all tests
 
-if (!exists('.debug') || !.debug) {
+if (exists('.debug') && .debug) {
    context("Regression Tests")
 
    test_that_ref <- function(prefix, desc, code) {

@@ -25,8 +25,9 @@ medians.per.group <- function(data, x, w, group.vars) {
    if (w == 'NULL') {
       grp.med <- ddply(data, group.vars, function(D) median(D[[x]], na.rm=TRUE))
    } else {
-      grp.med <- ddply(data, group.vars,
-                       function(D) wtd.quantile(D[[x]], weights=D[[w]], probs=0.5, na.rm=TRUE, normwt=TRUE))
+      # workaround: if all values are NA, wtd.mean throws error: 'zero non-NA points'
+      f <- function(D) if (all(is.na(D[[x]]))) { NA } else { wtd.quantile(D[[x]], weights=D[[w]], probs=0.5, na.rm=TRUE, normwt=TRUE) }
+      grp.med <- ddply(data, group.vars, f)
    }
    names(grp.med)[length(grp.med)] <- '.med.'
    return(grp.med)
@@ -658,8 +659,7 @@ gplt.spine3 <- function(data, x, y, z, w='NULL',
 # bar plot with stat_bin
 gplt.bar <- function(data, x, w='NULL', ...) {
    p <- ggplot(data, aes_string(x=x, weight=w)) +
-      geom_bar(color='black', ...) +
-      ylab(NULL)
+      geom_bar(color='black', ...)
    return(p)
 }
 
@@ -673,7 +673,14 @@ gplt.bar.identity <- function(data, x, y, z='NULL', w='NULL', ...) {
 # violin (or box) plot with overlayed median points
 gplt.box <- function(data, x, y, w='NULL', med='NULL', use.geom.violin=TRUE, ...) {
 
+   # note: geom_violin throws an error if all values are equal
+   # workaround: add very small jitter
+   if (use.geom.violin) {
+      data[[y]] <- data[[y]] +
+         1E-10 * max(data[[y]], na.rm=TRUE) * (runif(nrow(data)) - 0.5)
+   }
    p <- ggplot(data, aes_string(x=x, y=y, weight=w, ymax=max(y,na.rm=TRUE)))
+
    if (use.geom.violin) {
       p <- p + geom_violin(color='black', ...)
       if (med != 'NULL') {
@@ -705,10 +712,6 @@ gplt.density <- function(data, x, w='NULL', med='NULL',
    } else {
       p <- p + geom_histogram(color='black', ...)
    }
-
-   # y label 'density' not very useful
-   p <- p + theme(axis.ticks.y=element_blank(),
-                  axis.text.y=element_blank())
 
    return(p)
 }
@@ -783,7 +786,7 @@ plotluck.options <- function(...) {
       discretize.intervals.z=5,
       min.points.hex=5000,
       min.points.density=20,
-      min.points.box=5,
+      min.points.box=10,
       min.size.grid.heat=2,
       min.coverage.heat=0.5,
       convert.duplicates.to.weights=TRUE,
@@ -806,7 +809,7 @@ plotluck.options <- function(...) {
       exclude.factor=NULL,
       fill.default='deepskyblue',
       alpha.default=0.3,
-      theme.axis.x.factor=theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=0.5)))
+      theme.axis.x.factor=theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=1)))
    overrides <- list(...)
    unknown <- setdiff(names(overrides), names(opts))
    if (length(unknown) > 0) {
@@ -1119,8 +1122,6 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
          warning('weight is NA for %d instances, deleting', length(which(weight.na)))
          data <- data[!weight.na, ]
       }
-      # scale weights
-      data[[w]] <- nrow(data) * data[[w]] / sum(data[[w]])
    }
 
    # if data size too large, apply sampling
@@ -1279,7 +1280,21 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
          if (n.max.level > opts$min.points.density) {
             type.plot <- 'density'
             vars.covered <- x
-            title.label[[y]] <- NULL
+            if (opts$use.geom.density == TRUE) {
+               if (w == 'NULL') {
+                  title.label[[y]] <- 'density'
+               } else {
+                  title.label[[y]] <- sprintf('%s density', w)
+               }
+            } else {
+               # histogram
+               if (w == 'NULL') {
+                  title.label[[y]] <- 'count'
+               } else {
+                  title.label[[y]] <- w
+               }
+            }
+
             p <- gplt.density(data, x, w=w, med='.med.',
                               use.geom.density=opts$use.geom.density,
                               alpha=opts$alpha.default, ...)
@@ -1303,6 +1318,13 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
          color.usable <- FALSE
          vars.covered <- x
          is.num[[y]] <- TRUE
+
+         if (w == 'NULL') {
+            title.label[[y]] <- 'count'
+         } else {
+            title.label[[y]] <- w
+         }
+
          p <- gplt.bar(data, x, w, alpha=opts$alpha.default, ...)
       } else if ((!is.num[[x]]) && is.num[[y]]) {
          if (n.max.level > opts$min.points.box) {
@@ -1536,12 +1558,14 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
 #' plotluck.multi(iris)
 #'
 #' # 2D dependencies with one fixed variable on horizontal axis
-#' p<-plotluck.multi(iris, Species)
+#' plotluck.multi(iris, Species)
 #'
-#'#' # 2D dependencies with one fixed variable on horizontal axis
-#' p<-plotluck.multi(iris, all, Species)
+#' # 2D dependencies with one fixed variable on vertical axis
+#' plotluck.multi(iris, all, Species)
 #'
-#'
+#' # All pairs of variables
+#' plotluck.multi(iris, all, all)
+
 plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL, in.grid=TRUE,
                            opts=plotluck.options(), ...) {
 
@@ -1549,19 +1573,20 @@ plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL, in.grid=TRUE,
    y <- deparse(substitute(y))
    w <- deparse(substitute(w))
 
-   if (x != 'all' && x != 'NULL' &&
-          y != 'all' && y != 'NULL') {
+   if ((x == 'all' || x == 'NULL') && y == 'NULL') {
+      # 1D
+      x <- 'all'
+   } else if (x == 'NULL' && y=='all') {
+      # switch
+      x <- 'all'
+      y <- 'NULL'
+   } else if (x != 'NULL' && x != 'all' && y != 'NULL' && y != 'all') {
       stop('at least one of x or y must be "all"')
-   }
-
-   if (x == 'NULL') {
-      if (y == 'NULL') {
-         x <- 'all'
-      } else if (y != 'all') {
+   } else {
+      if (x == 'NULL') {
          x <- 'all'
       }
-   } else if (y == 'NULL') {
-      if (x != 'all') {
+      if (y == 'NULL') {
          y <- 'all'
       }
    }
@@ -1618,23 +1643,23 @@ plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL, in.grid=TRUE,
       opts$max.facets.row <- NULL
       opts$max.facets.row <- NULL
 
-      x.fixed <- (x != 'all' && x != 'NULL')
-      y.fixed <- (y != 'all' && y != 'NULL')
-
-
       if (x == 'all' && y == 'all') {
          # write the axis labels only on the margins
          combinations$xlab[combinations$y != names(data)[length(data)]] <- ' + xlab(NULL)'
          combinations$ylab[combinations$x != names(data)[1]]  <- ' + ylab(NULL)'
       }
-      if (x.fixed) {
+      if (x != 'all') {
          # do not repeat the axis label for the constant dimension
          combinations$xlab <- ' + xlab(NULL)'
-         main <- x
+         if (x != 'NULL') {
+            main <- x
+         }
       }
-      if (y.fixed) {
+      if (y != 'all') {
          combinations$ylab <- ' + ylab(NULL)'
-         main <- y
+         if (y != 'NULL') {
+            main <- y
+         }
       }
    }
 
@@ -1642,7 +1667,7 @@ plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL, in.grid=TRUE,
                         combinations$x, combinations$y, w, combinations$xlab, combinations$ylab, theme.multi)
 
    call.str <- sprintf('list(%s)', paste(call.strs, collapse=','))
-   try.plot <- function(expr) {p <- try(expr); if (!is.character(p)) {return(p)} else {return(geterrmessage())}}
+   try.plot <- function(expr) {p <- try(expr); if (!is.character(p)) {return(p)} else {return(gplt.blank(geterrmessage()))}}
 
    plots <- eval(parse(text=call.str))
    ret <- structure(list(plots=plots, in.grid=in.grid, main=main), class='plotluck_multi')

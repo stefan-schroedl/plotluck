@@ -51,10 +51,13 @@ data(iris)
 plotluck.multi(iris)
 
 # 2D dependencies with one fixed variable on horizontal axis
-p<-plotluck.multi(iris, Species)
+plotluck.multi(iris, Species)
 
-#' # 2D dependencies with one fixed variable on horizontal axis
-p<-plotluck.multi(iris, all, Species)
+# 2D dependencies with one fixed variable on vertical axis
+plotluck.multi(iris, all, Species)
+
+# All pairs of variables
+plotluck.multi(iris, all, all)
 }
 \seealso{
 \code{\link{plotluck}}
