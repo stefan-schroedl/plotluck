@@ -803,6 +803,7 @@ plotluck.options <- function(...) {
       spine.plot.margin.y=0.02,
       max.sample.rows=100000,
       use.geom.violin=TRUE,
+      max.levels.violin=20,
       use.geom.density=TRUE,
       max.facets.column=10,
       max.facets.row=10,
@@ -976,7 +977,9 @@ plotluck.options <- function(...) {
 #'  quantiles are less useful if the distribution is not unimodal. A wrong
 #'  choice of the number of bins of a histogram can create misleading artifacts.
 #'
-#'  Nevertheless, the defaults can be overriden by changing options
+#'  If the resulting graph would contain too many (more than
+#'  \code{max.levels.violin}) violin plots in a row, the algorithm switches to
+#'  box plots. The defaults can also be directly overriden by changing options
 #'  \code{use.geom.violin} and \code{use.geom.density}.
 #'
 #'  Due to their well-documented problematic aspects, pie charts and stacked bar
@@ -1252,10 +1255,14 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
          data <- merge(data, grp.med)
       }
 
-      # compute maximum number of instances per joint factor levels
+      # compute joint number of factor combinations, and
+      # and the maximum number of instances in them
       if (length(vars.non.numeric) > 0) {
-         n.max.level <- max(table(data[,vars.non.numeric], exclude=exclude.factor))
+         t <- table(data[,vars.non.numeric], exclude=exclude.factor)
+         num.level   <- length(t)
+         n.max.level <- max(t)
       } else {
+         num.level <- 1
          n.max.level <- nrow(data)
       }
 
@@ -1329,8 +1336,15 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       } else if ((!is.num[[x]]) && is.num[[y]]) {
          if (n.max.level > opts$min.points.box) {
             type.plot <- 'box'
+
+            # if there are too many violin plots in a horizontal row, they
+            # just look like black lines
+            use.geom.violin <- opts$use.geom.violin
+            if (use.geom.violin && num.level > opts$max.levels.violin) {
+               use.geom.violin <- FALSE
+            }
             p <- gplt.box(data, x, y, w=w, med='.med.',
-                          use.geom.violin=opts$use.geom.violin,
+                          use.geom.violin=use.geom.violin,
                           alpha=opts$alpha.default, ...)
          } else if (n.max.level > 1) {
             type.plot <- 'scatter.fact.num'

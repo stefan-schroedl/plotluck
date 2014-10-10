@@ -164,7 +164,9 @@ bar plots.
  quantiles are less useful if the distribution is not unimodal. A wrong
  choice of the number of bins of a histogram can create misleading artifacts.
 
- Nevertheless, the defaults can be overriden by changing options
+ If the resulting graph would contain too many (more than
+ \code{max.levels.violin}) violin plots in a row, the algorithm switches to
+ box plots. The defaults can also be directly overriden by changing options
  \code{use.geom.violin} and \code{use.geom.density}.
 
  Due to their well-documented problematic aspects, pie charts and stacked bar
