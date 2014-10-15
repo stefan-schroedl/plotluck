@@ -610,9 +610,7 @@ gplt.spine <- function(data, x, y, w='NULL',
    ggplot(plot.data, aes(xmin=left, xmax=right, ymin=bottom, ymax=top)) +
       geom_rect(aes_string(fill=y), col='black', ...) +
       scale_x_continuous(breaks=x.tab.df$x.center, labels=levels(data[[x]])) +
-      theme(axis.ticks.x=element_blank(),
-            axis.ticks.y=element_blank(),
-            axis.text.y=element_blank())
+      theme(axis.ticks.x=element_blank())
 }
 
 
@@ -1405,6 +1403,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
          type.plot <- 'spine'
          color.usable <- FALSE
          if (z == 'NULL') {
+            is.num[[y]] <- TRUE      # display y grid lines
             title.label[[y]] <- NULL # y reflected in color legend
             p <- gplt.spine(data, x, y, w,
                             plot.margin.x=opts$spine.plot.margin.x,
