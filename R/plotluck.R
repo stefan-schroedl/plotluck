@@ -509,9 +509,8 @@ gplt.scatter <- function(data, x, y='NULL', w='NULL',
             h.jitter <- factor.jitter
          }
       }
-
-      p <- p + geom_point(alpha=0.6, position=position_jitter(width=w.jitter, height=h.jitter), ...)
    }
+      p <- p + geom_point(alpha=0.6, position=position_jitter(width=w.jitter, height=h.jitter), ...)
 
    if (use.weights) {
       # add a shaded halo according to weights
