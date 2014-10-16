@@ -294,12 +294,21 @@ preprocess.factors <- function(data, x, w='NULL',
       stop(sprintf('variable %s has only single level, giving up', x))
    }
 
-   if (!is.numeric(x.data) && !is.factor(x.data)) {
+   if (is.numeric(x.data)) {
+      if (u <= few.unique.as.factor &&
+             nrow(data) > u * u) { # heuristic similar to histogram binning
+         return(ordered(x.data, exclude=exclude.factor))
+      } else {
+         return(x.data)
+      }
+   }
+
+   if (!is.factor(x.data)) {
       # i.e., character or logical
       x.data <- factor(x.data, exclude=exclude.factor)
    }
 
-   if (!is.numeric(x.data) && u > max.factor.levels) {
+   if (u > max.factor.levels) {
       warning(sprintf('factor variable %s has too many levels (%d), truncating to %d', x, u, max.factor.levels))
       tab <- table(x.data)
       data[[x]] <- x.data
@@ -309,17 +318,13 @@ preprocess.factors <- function(data, x, w='NULL',
       levels(x.data) <- c(levels(x.data), '.other.')
       x.data[idx.trunc] <- '.other.'
       x.data <- factor(x.data, levels=c(levels.reduced, '.other.'), exclude=exclude.factor)
-      return(x.data)
-   } else if (!is.numeric(x.data) && u == 2) {
+   } else if (u == 2) {
       # binary variables are trivially ordered
-      return(ordered(x.data))
-   } else if (is.numeric(x.data) &&
-                 u <= few.unique.as.factor &&
-                 nrow(data) > u * u) { # heuristic similar to histogram binning
-      return(ordered(x.data, exclude=exclude.factor))
+      x.data <- ordered(x.data)
    }
 
-   return(x.data)
+   # suppress unused levels
+   return(droplevels(x.data))
 }
 
 # determine number of histogram bins
