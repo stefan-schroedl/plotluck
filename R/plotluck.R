@@ -1162,7 +1162,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       weight.na <- is.na(data[[w]])
       if  (any(weight.na)) {
          warning('weight is NA for %d instances, deleting', length(which(weight.na)))
-         data[[w]] <- data[!weight.na, w]
+         data <- data[!weight.na,]
       }
       # if weights are integer, wtd.quantile() can lead to NA due to overflow
       data[[w]] <- as.double(data[[w]])
