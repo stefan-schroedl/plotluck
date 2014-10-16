@@ -25,7 +25,9 @@ medians.per.group <- function(data, x, w, group.vars) {
    if (w == 'NULL') {
       grp.med <- ddply(data, group.vars, function(D) median(D[[x]], na.rm=TRUE))
    } else {
-      # workaround: if all values are NA, wtd.mean throws error: 'zero non-NA points'
+      # workaround for problems in wtd.quantile:
+      # - if all values are NA, wtd.mean throws error: 'zero non-NA points'
+      # - if weights are integer, sum can lead to NA due to overflow (conversion to double in plotluck)
       f <- function(D) if (all(is.na(D[[x]]))) { NA } else { wtd.quantile(D[[x]], weights=D[[w]], probs=0.5, na.rm=TRUE, normwt=TRUE) }
       grp.med <- ddply(data, group.vars, f)
    }
@@ -1160,8 +1162,10 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       weight.na <- is.na(data[[w]])
       if  (any(weight.na)) {
          warning('weight is NA for %d instances, deleting', length(which(weight.na)))
-         data <- data[!weight.na, ]
+         data[[w]] <- data[!weight.na, w]
       }
+      # if weights are integer, wtd.quantile() can lead to NA due to overflow
+      data[[w]] <- as.double(data[[w]])
    }
 
    # if data size too large, apply sampling
