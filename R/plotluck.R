@@ -278,7 +278,7 @@ order.factor.mean <- function(data, x, y, w='NULL', decreasing=TRUE, exclude.fac
 # return a possibly refactored vector:
 # - convert character vectors into factors
 # - if there are more than max.factor.levels levels, retain only the most frequent ones,
-#   summarize the remaining ones into '.other.'
+#   merge the remaining ones into '.other.'
 # - convert a numeric variable with less than few.unique.as.factor distinct values
 #   into a factor, if length would have allowed for more distinct values
 # - exclude-factor - flag to apply in factor(...) calls, to preserve NA values
@@ -1001,7 +1001,7 @@ plotluck.options <- function(...) {
 #'
 #'  If an unordered factor has too many levels, plots can get messy. In this
 #'  case, only the \code{max.factor.levels} most frequent ones are retained,
-#'  while the rest is binned together in a new default level.
+#'  while the rest are merged into a default level '.other.'.
 #'
 #'@section Column name matching: Column names \code{x,y,z,w} are matched by
 #'  unique prefix, and ignoring case.
@@ -1533,7 +1533,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       p <- p + opts$theme.axis.x.factor
    }
 
-   # note: coord_flip() changes the scales and labels are along with the coordinates,
+   # note: coord_flip() changes the scales and labels along with the coordinates,
    # but not the grid orientation and axis text properties
 
    # axis scaling

@@ -148,7 +148,7 @@ bar plots.
 
  If an unordered factor has too many levels, plots can get messy. In this
  case, only the \code{max.factor.levels} most frequent ones are retained,
- while the rest is binned together in a new default level.
+ while the rest are merged into a default level '.other.'.
 }
 
 \section{Column name matching}{
