@@ -290,8 +290,9 @@ preprocess.factors <- function(data, x, w='NULL',
    x.data <- data[[x]]
    non.na <- !is.na(x.data)
    u <- length(unique(x.data[non.na]))
-   if (u <= 1) {
-      stop(sprintf('variable %s has only single level, giving up', x))
+   if (u == 1) {
+      # note: case of all NA already caught in function plotluck
+      stop(sprintf('variable %s has only single level ("%s"), giving up', x, unique(x.data[non.na])))
    }
 
    if (is.numeric(x.data)) {
@@ -1132,6 +1133,9 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
             }
          } else {
             assign(n, names(data)[idx])
+            if (all(is.na(data[[n.val]]))) {
+               stop(sprintf('variable %s is completely missing, giving up', n.val))
+            }
          }
       }
    }
