@@ -788,18 +788,32 @@ gplt.blank <- function(text=NULL, ...) {
 }
 
 
-#' Create options structure for \code{plotluck}
+#'Create options structure for \code{plotluck}
 #'
 #'@param ... parameters to override default settings
 #'@return a named list of options, usable by function \code{plotluck}
 #'
-#' \code{plotluck} accepts a list of options to modify its behavior. Calling
-#' \code{plotluck.options} without arguments produces a list with the default
-#' values. Specifying any number of attribute/value pairs overrides these
-#' values, but leaves other options the same.
+#'  \code{plotluck} accepts a list of options to modify its behavior. Calling
+#'  \code{plotluck.options} without arguments produces a list with the default
+#'  values. Specifying any number of attribute/value pairs overrides these
+#'  values selectively.
 #'
-#'Available options and their meaning is described inline in the documentation
-#'of \code{link{plotluck}}.
+#'  Available options and their meaning is described inline in the documentation
+#'  of \code{link{plotluck}}.
+#'
+#'@section Shortcut options:
+#'\itemize{
+#'\item By default, hex, density, box, and violin plots revert to
+#'scatter plots for low number of points. \code{prefer.scatter=FALSE} (resp.
+#'\code{TRUE}) sets \code{min.points.hex}, \code{min.points.density}, and
+#'\code{min.points.box} to zero (resp. \code{Inf}).
+#'\item If variable \code{z} is specified and the plot type, as well as its
+#'number of levels, allows it, coloring is used to for representation in a single
+#'plot; otherwise, \code{plotluck} reverts to faceting. Users can influence this
+#'behavior by setting \code{prefer.color.for.z=TRUE} (resp. \code{FALSE}), which
+#'causes \code{max.colors.scatter}, \code{max.colors.density},
+#'\code{max.colors.box}, and \code{max.colors.bar} to be \code{Inf} (resp. 0).
+#'}
 #'
 #'@note \code{plotluck}'s aim is to provide a function that is usable
 #'  "out-of-the-box", with no or very little manual tweaking. If you find
@@ -819,7 +833,7 @@ gplt.blank <- function(text=NULL, ...) {
 #' # use box-and-whiskers plot instead
 #' plotluck(iris, Species, Petal.Length, opts=plotluck.options(use.geom.violin=FALSE))
 #'
-#' @export
+#'@export
 plotluck.options <- function(...) {
    opts <- list(
       max.factor.levels=100,
@@ -854,6 +868,41 @@ plotluck.options <- function(...) {
       alpha.default=0.3,
       theme.axis.x.factor=theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=1)))
    overrides <- list(...)
+
+   # shortcut options
+   if ('prefer.color.for.z' %in% names(overrides)) {
+      use.color.for.z <- overrides[['prefer.color.for.z']]
+      overrides['prefer.color.for.z'] <- NULL
+      if (!is.na(use.color.for.z)) {
+         if (use.color.for.z) {
+            opts$max.colors.scatter <- Inf
+            opts$max.colors.density <- Inf
+            opts$max.colors.box     <- Inf
+            opts$max.colors.bar     <- Inf
+         } else {
+            opts$max.colors.scatter <- 0
+            opts$max.colors.density <- 0
+            opts$max.colors.box     <- 0
+            opts$max.colors.bar     <- 0
+         }
+      }
+   }
+   if ('prefer.scatter' %in% names(overrides)) {
+      prefer.scatter <- overrides[['prefer.scatter']]
+      overrides['prefer.scatter'] <- NULL
+      if (!is.na(prefer.scatter)) {
+         if (prefer.scatter) {
+            opts$min.points.hex <- Inf
+            opts$min.points.density <- Inf
+            opts$min.points.box     <- Inf
+         } else {
+            opts$min.points.hex <- 0
+            opts$min.points.density <- 0
+            opts$min.points.box     <- 0
+         }
+      }
+   }
+
    unknown <- setdiff(names(overrides), names(opts))
    if (length(unknown) > 0) {
       stop(sprintf('unknown options: %s', paste(unknown, sep='',collapse =', ')))
@@ -1133,8 +1182,8 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
             }
          } else {
             assign(n, names(data)[idx])
-            if (all(is.na(data[[n.val]]))) {
-               stop(sprintf('variable %s is completely missing, giving up', n.val))
+            if (all(is.na(data[[idx]]))) {
+               stop(sprintf('variable %s is completely missing, giving up', names(data)[idx]))
             }
          }
       }

@@ -11,13 +11,13 @@ plotluck.options(...)
 \value{
 a named list of options, usable by function \code{plotluck}
 
-\code{plotluck} accepts a list of options to modify its behavior. Calling
-\code{plotluck.options} without arguments produces a list with the default
-values. Specifying any number of attribute/value pairs overrides these
-values, but leaves other options the same.
+ \code{plotluck} accepts a list of options to modify its behavior. Calling
+ \code{plotluck.options} without arguments produces a list with the default
+ values. Specifying any number of attribute/value pairs overrides these
+ values selectively.
 
-Available options and their meaning is described inline in the documentation
-of \code{link{plotluck}}.
+ Available options and their meaning is described inline in the documentation
+ of \code{link{plotluck}}.
 }
 \description{
 Create options structure for \code{plotluck}
@@ -27,6 +27,21 @@ Create options structure for \code{plotluck}
  "out-of-the-box", with no or very little manual tweaking. If you find
  yourself needing to change option values repeatedly or find the presets to
  be suboptimal, please contact the author.
+}
+\section{Shortcut options}{
+
+\itemize{
+\item By default, hex, density, box, and violin plots revert to
+scatter plots for low number of points. \code{prefer.scatter=FALSE} (resp.
+\code{TRUE}) sets \code{min.points.hex}, \code{min.points.density}, and
+\code{min.points.box} to zero (resp. \code{Inf}).
+\item If variable \code{z} is specified and the plot type, as well as its
+number of levels, allows it, coloring is used to for representation in a single
+plot; otherwise, \code{plotluck} reverts to faceting. Users can influence this
+behavior by setting \code{prefer.color.for.z=TRUE} (resp. \code{FALSE}), which
+causes \code{max.colors.scatter}, \code{max.colors.density},
+\code{max.colors.box}, and \code{max.colors.bar} to be \code{Inf} (resp. 0).
+}
 }
 \examples{
 # list all default options
