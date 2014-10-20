@@ -616,7 +616,9 @@ gplt.spine <- function(data, x, y, w='NULL',
    plot.data$top      <- plot.data$bottom     + plot.data$y.cond
 
    ggplot(plot.data, aes(xmin=left, xmax=right, ymin=bottom, ymax=top)) +
-      geom_rect(aes_string(fill=y), col='black', ...) +
+      # make outline color same as fill color - black outline will hide colors
+      # for very narrow stripes
+      geom_rect(aes_string(fill=y, col=y), ...) +
       scale_x_continuous(breaks=x.tab.df$x.center, labels=levels(data[[x]])) +
       theme(axis.ticks.x=element_blank())
 }
@@ -677,7 +679,9 @@ gplt.spine3 <- function(data, x, y, z, w='NULL',
    plot.data$top      <- plot.data$bottom     + plot.data$y.cond
 
    ggplot(plot.data, aes(xmin=left, xmax=right, ymin=bottom, ymax=top)) +
-      geom_rect(aes_string(fill=z), col='black', ...) +
+      # make outline color same as fill color - black outline will hide colors
+      # for very narrow stripes
+      geom_rect(aes_string(fill=z, col=z), ...) +
       scale_y_continuous(breaks=y.tab.df$y.center, labels=levels(data[[y]])) +
       scale_x_continuous(breaks=x.tab.df$x.center, labels=levels(data[[x]])) +
       # write labels slanted to mitigate clutter
