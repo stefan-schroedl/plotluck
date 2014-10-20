@@ -144,7 +144,8 @@ log_mod_breaks <- function(n=5, base=10, offset=0)
          # Note: known issue with log scaling
          # https://github.com/hadley/ggplot2/issues/930
          # seems to be happening mostly with scatter plot, density/hex less affected
-         warning('skipping tick mark computation due to existing ggplot issue. Try using hex or density instead of scatter plot.')
+         warning('Skipping tick mark computation due to existing ggplot issue.
+                 Try using hex or density instead of scatter plot or histogram.')
          return(1)
       }
 
@@ -292,7 +293,7 @@ preprocess.factors <- function(data, x, w='NULL',
    u <- length(unique(x.data[non.na]))
    if (u == 1) {
       # note: case of all NA already caught in function plotluck
-      stop(sprintf('variable %s has only single level ("%s"), giving up', x, unique(x.data[non.na])))
+      stop(sprintf('Variable %s has only single level ("%s"), giving up', x, unique(x.data[non.na])))
    }
 
    if (is.numeric(x.data)) {
@@ -310,7 +311,7 @@ preprocess.factors <- function(data, x, w='NULL',
    }
 
    if (u > max.factor.levels) {
-      warning(sprintf('factor variable %s has too many levels (%d), truncating to %d', x, u, max.factor.levels))
+      warning(sprintf('Factor variable %s has too many levels (%d), truncating to %d', x, u, max.factor.levels))
       tab <- table(x.data)
       data[[x]] <- x.data
       levels.ord <- order.factor.freq(data, x, w, if.ordered=TRUE, exclude.factor=exclude.factor)
@@ -339,19 +340,19 @@ nclass.FD.modified <- function(x, max.bins=200) {
       return(1L)
    }
    # minimum reasonable bin size
-   h <- 0.5 * min(abs(diff(u)))
+   h <- 0.5 * min(abs(diff(u)), na.rm=TRUE)
 
    # for very few unique values, show all of them individually
    if (length(u) > 10) {
-      h2 <- 2 * stats::IQR(x)
+      h2 <- 2 * stats::IQR(x, na.rm=TRUE)
       if (h2 == 0)
-         h2 <- 2 * stats::mad(x, constant=2)
+         h2 <- 2 * stats::mad(x, constant=2, na.rm=TRUE)
       if (h2 > 0)
          h <- max(h, h2 * length(x)^(-1/3))
    }
 
    # capping the number of bins, since for some features the estimated bins are very high causing the hist() function to throw an error
-   num.bins <- ceiling(diff(range(u))/h)
+   num.bins <- ceiling(diff(range(u, na.rm=TRUE))/h)
    num.bins <- min(max.bins,
                    max(min(5, length(u), max.bins, length(x)/log2(length(x))),
                        num.bins))
@@ -710,7 +711,7 @@ gplt.box <- function(data, x, y, w='NULL', med='NULL', use.geom.violin=TRUE, ...
    p <- ggplot(data, aes_string(x=x, y=y, weight=w, ymax=max(y,na.rm=TRUE)))
 
    if (use.geom.violin) {
-      p <- p + geom_violin(color='black', ...)
+      p <- p + geom_violin(color='black', scale='width', ...)
       if (med != 'NULL') {
          # dodge does not work correctly when width is not specified
          # see https://github.com/hadley/ggplot2/issues/525
@@ -905,7 +906,7 @@ plotluck.options <- function(...) {
 
    unknown <- setdiff(names(overrides), names(opts))
    if (length(unknown) > 0) {
-      stop(sprintf('unknown options: %s', paste(unknown, sep='',collapse =', ')))
+      stop(sprintf('Unknown options: %s', paste(unknown, sep='',collapse =', ')))
    }
    opts[names(overrides)] <- overrides
    return(opts)
@@ -1176,14 +1177,14 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
             idx <- which(!is.na(sapply(cols.lc, function(tab, x) pmatch(x, tab), x=n.val)))
 
             if (length(idx) == 0) {
-               stop(sprintf('no match for "%s" in data columns', n.val))
+               stop(sprintf('No match for "%s" in data columns', n.val))
             } else {
-               stop(sprintf('ambiguous match for "%s": %s', n.val, paste(names(data)[idx], sep='', collapse=',')))
+               stop(sprintf('Ambiguous match for "%s": %s', n.val, paste(names(data)[idx], sep='', collapse=',')))
             }
          } else {
             assign(n, names(data)[idx])
             if (all(is.na(data[[idx]]))) {
-               stop(sprintf('variable %s is completely missing, giving up', names(data)[idx]))
+               stop(sprintf('Variable %s is completely missing, giving up', names(data)[idx]))
             }
          }
       }
@@ -1211,14 +1212,14 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
    # process weights
    if (w != 'NULL') {
       if  (!is.numeric(data[[w]])) {
-         stop('weight must be numeric')
+         stop('Weight must be numeric')
       }
       if  (any(data[[w]]<0)) {
-         stop('weight must be non-negative')
+         stop('Weight must be non-negative')
       }
       weight.na <- is.na(data[[w]])
       if  (any(weight.na)) {
-         warning('weight is NA for %d instances, deleting', length(which(weight.na)))
+         warning('Weight is NA for %d instances, deleting', length(which(weight.na)))
          data <- data[!weight.na,]
       }
       # if weights are integer, wtd.quantile() can lead to NA due to overflow
@@ -1228,11 +1229,12 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
    # if data size too large, apply sampling
    n.row <- nrow(data)
    if (n.row > opts$max.sample.rows) {
-      warning(sprintf('data set has %d rows, sampling down to %d rows', n.row, opts$max.sample.rows))
+      warning(sprintf('Data set has %d rows, sampling down to %d rows', n.row, opts$max.sample.rows))
       if (w == 'NULL') {
-         data <- data[sample(1:n.row, opts$max.sample.rows), ]
+         data <- data[sample(1:n.row, opts$max.sample.rows),, drop=FALSE]
       } else {
-         data <- data[sample(1:n.row, opts$max.sample.rows), prob=data[[w]], ]
+         # note: weighted sampling itself can be quite slow
+         data <- data[sample(1:n.row, opts$max.sample.rows, prob=data[[w]]),, drop=FALSE ]
       }
    }
 
@@ -1697,7 +1699,7 @@ plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL, in.grid=TRUE,
       x <- 'all'
       y <- 'NULL'
    } else if (x != 'NULL' && x != 'all' && y != 'NULL' && y != 'all') {
-      stop('at least one of x or y must be "all"')
+      stop('At least one of x or y must be "all"')
    } else {
       if (x == 'NULL') {
          x <- 'all'
