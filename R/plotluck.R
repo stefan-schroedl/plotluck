@@ -566,7 +566,7 @@ gplt.heat <- function(data, x, y, z, w='NULL', ...) {
    names(means) <- c(x, y, z)
 
    p <- ggplot(means, aes_string(x=x, y=y, fill=z)) +
-      geom_tile(color='black', ...) +
+      geom_tile(color=NA, ...) +
       scale_fill_gradientn(colours=rev(rainbow(2)))
    return(p)
 }
@@ -692,14 +692,14 @@ gplt.spine3 <- function(data, x, y, z, w='NULL',
 # bar plot with stat_bin
 gplt.bar <- function(data, x, w='NULL', ...) {
    p <- ggplot(data, aes_string(x=x, weight=w)) +
-      geom_bar(color='black', ...)
+      geom_bar(...)
    return(p)
 }
 
 # bar plot with stat_identity
 gplt.bar.identity <- function(data, x, y, z='NULL', w='NULL', ...) {
    p <- ggplot(data, aes_string(x=x, y=y, color=z, weight=w)) +
-      geom_bar(stat='identity', color='black', position=position_dodge(), ...)
+      geom_bar(stat='identity', position=position_dodge(), ...)
    return(p)
 }
 
@@ -715,7 +715,7 @@ gplt.box <- function(data, x, y, w='NULL', med='NULL', use.geom.violin=TRUE, ...
    p <- ggplot(data, aes_string(x=x, y=y, weight=w, ymax=max(y,na.rm=TRUE)))
 
    if (use.geom.violin) {
-      p <- p + geom_violin(color='black', scale='width', ...)
+      p <- p + geom_violin(scale='width', ...)
       if (med != 'NULL') {
          # dodge does not work correctly when width is not specified
          # see https://github.com/hadley/ggplot2/issues/525
@@ -1508,20 +1508,15 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       }
    }
 
-   if (type.plot %in% c('box', 'bar')) {
-      p <- p + aes_string(fill=x)
+   if (type.plot %in% c('box', 'bar', 'scatter.fact.num')) {
+      p <- p + aes_string(fill=x) +
+         aes_string(color=x)
       color.guides <- FALSE
    }
 
    if (type.plot == 'scatter.num.fact') {
       p <- p + aes_string(fill=y) +
          aes_string(color=y)
-      color.guides <- FALSE
-   }
-
-   if (type.plot == 'scatter.fact.num') {
-      p <- p + aes_string(fill=x) +
-         aes_string(color=x)
       color.guides <- FALSE
    }
 
@@ -1542,12 +1537,10 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
             color.used <- TRUE
          } else if (( type.plot == 'density'          && u <= opts$max.colors.density) ||
                      (type.plot == 'scatter.num.fact' && u <= opts$max.colors.scatter) ||
-                     (type.plot == 'scatter.fact.num' && u <= opts$max.colors.scatter)) {
-            p <- p + aes_string(fill=var.next) + aes_string(color=var.next)
-            color.used <- TRUE
-         } else if (( type.plot == 'box'              && u <= opts$max.colors.box) ||
+                     (type.plot == 'scatter.fact.num' && u <= opts$max.colors.scatter) ||
+                     (type.plot == 'box'              && u <= opts$max.colors.box) ||
                      (type.plot == 'bar'              && u <= opts$max.colors.bar)) {
-            p <- p + aes_string(fill=var.next)
+            p <- p + aes_string(fill=var.next) + aes_string(color=var.next)
             color.used <- TRUE
          }
       }
