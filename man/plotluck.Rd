@@ -9,23 +9,24 @@ plotluck(data, x, y = NULL, z = NULL, w = NULL,
 \arguments{
 \item{data}{a data frame}
 
-\item{x,y,z}{column names}
+\item{x,}{y, z column names}
 
 \item{w}{weight column (optional)}
 
 \item{opts}{a named list of options (optional)}
 
-\item{...}{additional parameters will be passed to the respective geom_* objects}
+\item{...}{additional parameters to be passed to the respective geom_* objects}
 }
 \value{
 a ggplot object
 }
 \description{
-\code{plotluck} examines one, two, or three variables and creates, based on
-their characteristics, a scatter, box, bar, density, hex or spine plot, or a
-heat map. It also automates handling of observation weights, log-scaling of
-axes, reordering of factor levels, and overlays of smoothing curves and
-median lines.
+The aim of \code{plotluck} is to let the user focus on \emph{what} to plot,
+and automate the \emph{how}. It examines the data characteristics of one,
+two, or three variables and accordingly creates a scatter, box, bar, density,
+hex or spine plot, or a heat map. It also automates handling of observation
+weights, log-scaling of axes, reordering of factor levels, and overlays of
+smoothing curves and median lines.
 }
 \section{Determining the type of plot}{
  One-dimensional plots (i.e., when
@@ -34,7 +35,7 @@ median lines.
   number of data points is not sufficient (as determined by the option
   \code{min.points.density}) a strip chart (1D scatter plot) is drawn.
 
-  The following table summarizes the general heuristics for two dimensions
+  The following table summarizes the general heuristics for \emph{two} dimensions
   (\code{x, y} are not \code{NULL}):
 
 \tabular{lll}{
@@ -49,8 +50,8 @@ In the first three cases, if the number of data points is not sufficient (as
 determined by the options \code{min.points.hex}, \code{min.points.density},
 or \code{min.points.box}), the plot switches to a scatter plot.
 
-Density plots come with an overlaid vertical (weighted) median line; numeric scatter
-plots with a smoothing line incuding standard deviations.
+Density plots come with an overlaid vertical (weighted) median line; and
+numeric scatter plots with a smoothing line including standard deviations.
 For three dimensions, the algorithm first tries sue coloring to fit the
 \code{z} dimension into a single graph. If this is not possible (e.g., in the
 case of the hexbin plot, which encodes the number of points in a bin by the
@@ -134,10 +135,10 @@ bar plots.
 }
 
 \section{Sampling}{
- For very large data sets, plots will take a very long time
- (or crash R). \code{plotluck} has a built-in stop-gap: If the data comprises
- more than \code{max.sample.rows}, it will be sampled down to that size
- (taking weights into account, if supplied).
+ For very large data sets, plots can take a very long time
+ (or even crash R). \code{plotluck} has a built-in stop-gap: If the data
+ comprises more than \code{max.sample.rows}, it will be sampled down to that
+ size (taking weights into account, if supplied).
 }
 
 \section{Factor preprocessing}{
@@ -152,7 +153,7 @@ bar plots.
 }
 
 \section{Column name matching}{
- Column names \code{x,y,z,w} are matched by
+ Column names \code{x, y, z, w} are matched by
  unique prefix, and ignoring case.
 }
 
