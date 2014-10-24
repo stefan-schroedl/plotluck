@@ -4,36 +4,46 @@
 \title{Create several plots at once with \code{plotluck}}
 \usage{
 plotluck.multi(data, x = NULL, y = NULL, w = NULL, in.grid = TRUE,
-  opts = plotluck.options(), ...)
+  entropy.order = TRUE, opts = plotluck.options(), ...)
 }
 \arguments{
 \item{data}{a data frame}
 
-\item{x,y}{column names, or "all"}
+\item{x,}{y column names, or \code{all}}
 
 \item{w}{weight column (optional)}
 
 \item{in.grid}{flag whether a grid of plots should be produced}
 
+\item{entropy.order}{order dependency plots by conditional entropy}
+
 \item{opts}{a named list of options (optional)}
 
-\item{...}{additional parameters will be passed to \code{plotluck}}
+\item{...}{additional parameters to be passed to \code{plotluck}}
 }
 \value{
 an object of class plotluck_multi.
 
- With \code{in.grid==TRUE}, produces a grid of plots, rendered as minimal
+ With \code{in.grid=TRUE}, produces a grid of plots, rendered as minimal
  "spark lines" without annotations; otherwise, opens full plots in a separate
  window each.
 
- With \code{x==all} and \code{y==NULL}, a 1D plot for the distribution of
- each variable is drawn. When \code{x} (resp. \code{y}) is set to a column
- name and \code{y==all} (resp. \code{x=all}), a 2D plot is created with each
+ With \code{x=all} and \code{y=NULL}, a 1D plot for the distribution of each
+ variable is drawn. When \code{x} (resp. \code{y}) is set to a column name
+ and \code{y=all} (resp. \code{x=all}), a 2D plot is created with each
  variable in \code{data} on the \code{y}-axis (resp. \code{x}-axis), in turn.
- Finally, for \code{x==y==all}, a chart for each pair of variables is drawn,
+ Finally, for \code{x=y=all}, a chart for each pair of variables is drawn,
  with a diagonal of 1D distribution plots; this is analogous to the behavior
  of the default plot method for data frames, see
  \code{\link{plot.data.frame}}.
+
+ With \code{entropy.order=TRUE}, when one target variable \code{t} is drawn
+ against all other columns \code{z}, the plots are sorted by an estimate of
+ empirical conditional entropy \code{H(t|z)}; the goal is to prioritize the
+ more predictive independent variables. For large data sets the calculation
+ can sometimes be time consuming; it can be suppressed by setting
+ \code{entropy.order=FALSE}. Entropy ordering is never applied for 1-D
+ distributions or a complete matrix of all variable pairs.
 }
 \description{
 Create a number of 1D or 2D ggplots for the columns a data frame by calling
@@ -42,8 +52,8 @@ Create a number of 1D or 2D ggplots for the columns a data frame by calling
 \note{
 The class \code{plotluck_multi} does not have any functionality; it's
  sole purpose is to make this function work in the same way as \code{ggplot}
- and \code{plotluck}: namely, do the actual plotting if and only if the
- return value is not assigned.
+ and \code{plotluck}, namely, do the actual drawing if and only if the return
+ value is not assigned.
 }
 \examples{
 data(iris)

@@ -92,7 +92,7 @@ get.trans.fun <- function(x, expansion.thresh=2) {
 
 
 # calculate the floor or ceiling of the exponent of a number
-# note: for log-modulus (offset==1), sign of returned value signifies sign of
+# note: for log-modulus (offset=1), sign of returned value signifies sign of
 #   input value x; therefore, different exponents cannot be represented for |x| < 1.
 # note: for log-modulus, in order to distinguish between -10^0, 0, and 10^0,
 #   we encode -10^x=-x, -10=-1, -1=0, 0=1, 1=2, 10^x=x+2, ..
@@ -176,7 +176,7 @@ log_mod_breaks <- function(n=5, base=10, offset=0)
 }
 
 
-# log (offset==0) or log-modulus (offset==1) scale
+# log (offset=0) or log-modulus (offset=1) scale
 # John & Draper 1980; see e.g. http://blogs.sas.com/content/iml/2014/07/14/log-transformation-of-pos-neg/
 log_mod_trans <- function(base = exp(1), offset=0)
 {
@@ -245,7 +245,7 @@ order.factor.freq <- function(data, x, w='NULL', decreasing=TRUE,
 # return levels of (unordered) factor, sorted by (weighted) mean of dependent variable
 order.factor.mean <- function(data, x, y, w='NULL', decreasing=TRUE, exclude.factor=NA) {
 
-   if (x == y) {
+   if (y == 'NULL' || y == x) {
       return(order.factor.freq(data,x, w, decreasing, exclude.factor=exclude.factor))
    }
 
@@ -329,6 +329,7 @@ preprocess.factors <- function(data, x, w='NULL',
    return(droplevels(x.data))
 }
 
+
 # determine number of histogram bins
 # note: this is a modification the nclass.FD function, which sometimes returns '1'
 # for very uneven distributions.
@@ -359,16 +360,25 @@ nclass.FD.modified <- function(x, max.bins=200) {
    num.bins
 }
 
-# break a numeric variable into intervals
+# break a variable into intervals
 # - method=quantile - bins with equal number of samples
 # - method=histogram - equidistant intervals
 # - max.breaks - requested number of breaks
 # - keep.breaks - if there are less than that many distinct values to
-#   begin with, don't do additional binning
-discretize <- function(data, x, w='NULL',
-                       max.breaks=5,
-                       keep.breaks=10,
-                       method=c('quantile', 'histogram')) {
+#     begin with, don't do additional binning
+#
+# for factor variables with more than keep.breaks many levels:
+# - if y is not 'NULL', order levels by mean y, else by frequency
+#   (y is not used for numeric variables)
+# - bin the corresponding integer vector of level IDs
+# - the transformed level names are lists of levels
+quantize <- function(data, x,
+                     y='NULL',
+                     w='NULL',
+                     max.breaks=5,
+                     keep.breaks=10,
+                     method=c('quantile', 'histogram'),
+                     exclude.factor=NA) {
    x.data <- data[[x]]
    u <- unique(x.data)
    if (length(u) <= keep.breaks) {
@@ -378,19 +388,88 @@ discretize <- function(data, x, w='NULL',
    method <- match.arg(method)
 
    max.breaks <- min(max.breaks, nrow(data))
+
+   if (!is.numeric(data[[x]])) {
+      # order levels
+      data[[x]] <- as.factor(x.data)
+      x.levels <- order.factor.mean(data, x, y, w, decreasing=TRUE, exclude.factor=exclude.factor)
+      x.data <- factor(x.data, levels=x.levels, exclude=exclude.factor)
+      # treat as integers for binning
+      x.data <- as.integer(x.data)
+   }
+
+   # compute number of breaks
    if (method == 'quantile') {
+      probs <- seq(0, max.breaks) / max.breaks
       if (w=='NULL') {
-         breaks <- quantile(x.data, probs=seq(0,max.breaks)/max.breaks, na.rm=TRUE)
+         breaks <- quantile(x.data, probs=probs, na.rm=TRUE)
       } else {
          breaks <- wtd.quantile(x.data, weights=data[[w]],
-                                probs=seq(0,max.breaks)/max.breaks, na.rm=TRUE, normwt=TRUE)
+                                probs=probs, na.rm=TRUE, normwt=TRUE)
       }
    } else {
       n.breaks <- nclass.FD.modified(x.data, max.breaks)
       breaks <- hist(x.data, breaks=n.breaks, plot=FALSE)$breaks
    }
 
-   return(ordered(cut(x.data, breaks=unique(breaks), include.lowest=TRUE)))
+   if (!is.numeric(data[[x]])) {
+      breaks <- as.integer(round(breaks))
+      # dig.lab: in cut(), avoids scientific formatting for integers
+      dig.lab=50
+   } else {
+      dig.lab = 3L # same as usual default in cut()
+   }
+
+   # break into intervals
+   x.data <- ordered(cut(x.data, breaks=unique(breaks), include.lowest=TRUE, dig.lab=dig.lab))
+
+   # recreate level information for factors
+   if (!is.numeric(data[[x]])) {
+      # make lists of elements, e.g.:
+      #  - original levels 'a', 'b', 'c', 'd'
+      #  - binned level '(2,4]' ->  'c,d'
+      x.data <- as.factor(x.data)
+      reconstruct.levels <- function(interval, levels) {
+         left.bracket <- substr(interval,1,1)
+         left.idx  <- as.integer(gsub('[(\\[]([0-9]+),.*', '\\1', interval))
+         right.idx <- as.integer(gsub('.*,([0-9]+)\\]', '\\1', interval))
+         if (left.bracket == '(') {
+            left.idx <- left.idx + 1
+         }
+         # catch if level doesn't fit interval pattern
+         if (is.na(left.idx) || is.na(right.idx)) {
+            return(interval);
+         }
+         return(paste(levels[left.idx:right.idx], sep='', collapse=','))
+      }
+
+      levels(x.data) <- sapply(levels(x.data), reconstruct.levels, levels=x.levels)
+      x.data <- droplevels(x.data)
+   }
+
+   return(x.data)
+}
+
+
+# entropy: H(vars) = - \sum p(vars)log2(p(vars))
+# assumption: vars are factors
+entropy <- function(data, vars, w, exclude.factor=NA) {
+   tab  <- marginalize(data, vars, w, exclude.factor=exclude.factor)
+   log.tab <- log2(tab)
+   log.tab[tab==0] <- 0 # guard for -Inf
+   return(-sum(tab * log.tab))
+}
+
+
+# conditional entropy: H(y|x) = H(x,y) - H(x)
+# assumption: x, y are factors
+cond.entropy <- function(data, x, y, w, exclude.factor=NA) {
+   if (x == y) {
+      return(0);
+   }
+   hxy <- entropy(data, c(x, y), w, exclude.factor)
+   hx <- entropy(data, x, w, exclude.factor)
+   return(hxy - hx)
 }
 
 
@@ -399,8 +478,9 @@ marginalize <- function(data, var.list, w='NULL', exclude.factor=NA) {
    prop.table(xtabs(as.formula(sprintf('%s ~ %s', ifelse(w=='NULL', c(''), w), rhs)), data, exclude=exclude.factor))
 }
 
+
 # heuristic to decide whether to plot a heat map:
-# - axes x,y must be numeric or ordered factors
+# - axes x, y must be either numeric, or ordered factors
 # - axes must have at least min.size distinct values
 # - at least a fraction min.coverage of the grid points must have data
 is.grid.like <- function(data, x, y, z, min.size=3, min.coverage=0.5) {
@@ -417,7 +497,7 @@ is.grid.like <- function(data, x, y, z, min.size=3, min.coverage=0.5) {
    if (uy < min.size) {
       return(FALSE)
    }
-   u <- nrow(unique(data[,c(x,y)]))
+   u <- nrow(unique(data[,c(x, y)]))
    return(u >= min.coverage * ux * uy)
 }
 
@@ -555,11 +635,11 @@ gplt.heat <- function(data, x, y, z, w='NULL', ...) {
 
    # compute (weighted) means
    if (w=='NULL') {
-      means <- ddply(data.frame(x=x.data, y=y.data, z=z.data), .(x,y),
+      means <- ddply(data.frame(x=x.data, y=y.data, z=z.data), .(x, y),
                      summarise,
                      m=mean(z, na.rm=TRUE))
    } else {
-      means <- ddply(data.frame(x=x.data, y=y.data,z=z.data, w=data[[w]]), .(x,y),
+      means <- ddply(data.frame(x=x.data, y=y.data,z=z.data, w=data[[w]]), .(x, y),
                      summarise,
                      m=Hmisc::wtd.mean(z, w, na.rm=TRUE))
    }
@@ -586,16 +666,16 @@ gplt.spine <- function(data, x, y, w='NULL',
                        exclude.factor=NA,
                        ...) {
 
-   for (n in c(x,y)) {
+   for (n in c(x, y)) {
       if (is.numeric(data[[n]])) {
-         data[[n]] <- discretize(data, n, w)
+         data[[n]] <- quantize(data, n, w=w)
       }
    }
 
    x.lev <- length(levels(data[[x]]))
    y.lev <- length(levels(data[[y]]))
 
-   xy.tab  <- marginalize(data, c(x,y), w, exclude.factor=exclude.factor)
+   xy.tab  <- marginalize(data, c(x, y), w, exclude.factor=exclude.factor)
    x.tab   <- marginalize(data, x, w, exclude.factor=exclude.factor)
    y.cond  <- sweep(xy.tab, 1, x.tab, FUN='/')
 
@@ -635,9 +715,9 @@ gplt.spine3 <- function(data, x, y, z, w='NULL',
                         plot.margin.y=0.02,
                         exclude.factor=NA, ...) {
 
-   for (n in c(x,y,z)) {
+   for (n in c(x, y, z)) {
       if (is.numeric(data[[n]])) {
-         data[[n]] <- discretize(data, n, w)
+         data[[n]] <- quantize(data, n, w=w)
       }
    }
 
@@ -645,8 +725,8 @@ gplt.spine3 <- function(data, x, y, z, w='NULL',
    y.lev <- length(levels(data[[y]]))
    z.lev <- length(levels(data[[z]]))
 
-   xyz.tab <- marginalize(data, c(x,y,z), w, exclude.factor=exclude.factor)
-   xy.tab  <- marginalize(data, c(x,y), w, exclude.factor=exclude.factor)
+   xyz.tab <- marginalize(data, c(x, y, z), w, exclude.factor=exclude.factor)
+   xy.tab  <- marginalize(data, c(x, y), w, exclude.factor=exclude.factor)
    x.tab   <- marginalize(data, x, w, exclude.factor=exclude.factor)
    y.tab   <- marginalize(data, y, w, exclude.factor=exclude.factor)
    y.cond  <- sweep(xy.tab, 1, x.tab, FUN='/')
@@ -917,19 +997,35 @@ plotluck.options <- function(...) {
 }
 
 
+sample.data <- function(data, w='NULL', max.rows) {
+   n.row <- nrow(data)
+   if (n.row > max.rows) {
+      warning(sprintf('Data set has %d rows, sampling down to %d rows', n.row, max.rows))
+      if (w == 'NULL') {
+         data <- data[sample(1:n.row, max.rows),, drop=FALSE]
+      } else {
+         # note: weighted sampling itself can be quite slow
+         data <- data[sample(1:n.row, max.rows, prob=data[[w]]),, drop=FALSE]
+      }
+   }
+   return(data);
+}
+
+
 #' "I'm feeling lucky" for ggplot
 #'
-#' \code{plotluck} examines one, two, or three variables and creates, based on
-#' their characteristics, a scatter, box, bar, density, hex or spine plot, or a
-#' heat map. It also automates handling of observation weights, log-scaling of
-#' axes, reordering of factor levels, and overlays of smoothing curves and
-#' median lines.
+#' The aim of \code{plotluck} is to let the user focus on \emph{what} to plot,
+#' and automate the \emph{how}. It examines the data characteristics of one,
+#' two, or three variables and accordingly creates a scatter, box, bar, density,
+#' hex or spine plot, or a heat map. It also automates handling of observation
+#' weights, log-scaling of axes, reordering of factor levels, and overlays of
+#' smoothing curves and median lines.
 #'
 #' @param data a data frame
-#' @param x,y,z column names
+#' @param x, y, z column names
 #' @param w weight column (optional)
 #' @param opts a named list of options (optional)
-#' @param ... additional parameters will be passed to the respective geom_* objects
+#' @param ... additional parameters to be passed to the respective geom_* objects
 #' @return a ggplot object
 #' @export
 #'@keywords hplot, aplot, dplot
@@ -958,7 +1054,7 @@ plotluck.options <- function(...) {
 #'   number of data points is not sufficient (as determined by the option
 #'   \code{min.points.density}) a strip chart (1D scatter plot) is drawn.
 #'
-#'   The following table summarizes the general heuristics for two dimensions
+#'   The following table summarizes the general heuristics for \emph{two} dimensions
 #'   (\code{x, y} are not \code{NULL}):
 #'
 #' \tabular{lll}{
@@ -973,8 +1069,8 @@ plotluck.options <- function(...) {
 #' determined by the options \code{min.points.hex}, \code{min.points.density},
 #' or \code{min.points.box}), the plot switches to a scatter plot.
 #'
-#' Density plots come with an overlaid vertical (weighted) median line; numeric scatter
-#' plots with a smoothing line incuding standard deviations.
+#' Density plots come with an overlaid vertical (weighted) median line; and
+#' numeric scatter plots with a smoothing line including standard deviations.
 #
 #' For three dimensions, the algorithm first tries sue coloring to fit the
 #' \code{z} dimension into a single graph. If this is not possible (e.g., in the
@@ -1049,10 +1145,10 @@ plotluck.options <- function(...) {
 #'
 #'  Missing values in numeric variables are ignored.
 #'
-#'@section Sampling: For very large data sets, plots will take a very long time
-#'  (or crash R). \code{plotluck} has a built-in stop-gap: If the data comprises
-#'  more than \code{max.sample.rows}, it will be sampled down to that size
-#'  (taking weights into account, if supplied).
+#'@section Sampling: For very large data sets, plots can take a very long time
+#'  (or even crash R). \code{plotluck} has a built-in stop-gap: If the data
+#'  comprises more than \code{max.sample.rows}, it will be sampled down to that
+#'  size (taking weights into account, if supplied).
 #'
 #'@section Factor preprocessing: Frequently, when numeric variables have very
 #'  few values despite sufficient data size, it helps to treat these values as
@@ -1063,7 +1159,7 @@ plotluck.options <- function(...) {
 #'  case, only the \code{max.factor.levels} most frequent ones are retained,
 #'  while the rest are merged into a default level '.other.'.
 #'
-#'@section Column name matching: Column names \code{x,y,z,w} are matched by
+#'@section Column name matching: Column names \code{x, y, z, w} are matched by
 #'  unique prefix, and ignoring case.
 #'
 #'@section Remarks on the choice of plot types: By default, \code{plotluck} uses
@@ -1202,12 +1298,12 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       y <- 'NULL'
    }
 
-   if (z %in% c(x,y)) {
+   if (z %in% c(x, y)) {
       z <- 'NULL'
    }
 
-   vars.non.null   <- unique(c(x,y,z)[c(x,y,z) != 'NULL'])
-   vars.w.non.null <- unique(c(x,y,z,w)[c(x,y,z,w) != 'NULL'])
+   vars.non.null   <- unique(c(x, y, z)[c(x, y, z) != 'NULL'])
+   vars.w.non.null <- unique(c(x, y, z, w)[c(x, y, z, w) != 'NULL'])
 
    # reminder: all data manipulations have to be done before ggplot is called
 
@@ -1231,16 +1327,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
    }
 
    # if data size too large, apply sampling
-   n.row <- nrow(data)
-   if (n.row > opts$max.sample.rows) {
-      warning(sprintf('Data set has %d rows, sampling down to %d rows', n.row, opts$max.sample.rows))
-      if (w == 'NULL') {
-         data <- data[sample(1:n.row, opts$max.sample.rows),, drop=FALSE]
-      } else {
-         # note: weighted sampling itself can be quite slow
-         data <- data[sample(1:n.row, opts$max.sample.rows, prob=data[[w]]),, drop=FALSE ]
-      }
-   }
+   data <- sample.data(data, w, opts$max.sample.rows)
 
    # technicality: if the user has created a factor with 'exclude=FALSE', i.e.
    # is including NA as a separate level, we have to preserve it in all subsequent
@@ -1288,7 +1375,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
 
    # order factor levels to best reflect dependent variable
 
-   order.by <- structure(list(x, y, z), names=list(x,y,z))
+   order.by <- structure(list(x, y, z), names=list(x, y, z))
 
    if (z != 'NULL' &&
           (grid.xy ||
@@ -1318,7 +1405,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
                           exclude=exclude.factor)
    }
 
-   vars.covered <- intersect(c(x,y), vars.non.null) # the variables reflected in the plot
+   vars.covered <- intersect(c(x, y), vars.non.null) # the variables reflected in the plot
    color.usable <- TRUE  # can we color the plot to reflect additional variables?
    flip         <- FALSE # for num/factor scatter plots, we need to apply coord_flip(), see below
 
@@ -1327,12 +1414,12 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
                      ...)
       type.plot <- 'heat'
       color.usable <- FALSE
-      vars.covered <- c(x,y,z)
+      vars.covered <- c(x, y, z)
    } else {
 
       # for 3D, treat z as factor except for heat map
       if (is.num[[z]]) {
-         data[[z]] <- discretize(data, z, w, max.breaks=opts$discretize.intervals.z)
+         data[[z]] <- quantize(data, z, w=w, max.breaks=opts$discretize.intervals.z)
          data[[z]] <- factor(data[[z]],
                              levels=order.factor.mean(data, z, order.by[[z]], w,
                                                       exclude.factor=exclude.factor),
@@ -1375,7 +1462,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       # determine type of plot
 
       if (is.num[[x]] && is.num[[y]]) {
-         if (n.row >= opts$min.points.hex) {
+         if (nrow(data) >= opts$min.points.hex) {
             type.plot <- 'hex'
             color.usable <- FALSE
             p <- gplt.hex(data, x, y, w, alpha=opts$alpha.default, ...)
@@ -1463,7 +1550,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
             # no log transform
             type.plot <- 'bar'
             color.usable <- TRUE
-            vars.covered <- c(x,y)
+            vars.covered <- c(x, y)
             p <- gplt.bar.identity(data, x=x, y=y, w=w, alpha=opts$alpha.default, ...)
          }
       } else if ((!is.num[[x]]) & (!is.num[[y]])) {
@@ -1476,14 +1563,14 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
                             plot.margin.x=opts$spine.plot.margin.x,
                             exclude.factor=exclude.factor,
                             alpha=opts$alpha.default, ...)
-            vars.covered <- c(x,y)
+            vars.covered <- c(x, y)
          } else {
             p <- gplt.spine3(data, x, y, z, w,
                              plot.margin.x=opts$spine.plot.margin.x,
                              plot.margin.y=opts$spine.plot.margin.y,
                              exclude.factor=exclude.factor,
                              alpha=opts$alpha.default, ...)
-            vars.covered <- c(x,y,z)
+            vars.covered <- c(x, y, z)
          }
       }
    }
@@ -1635,35 +1722,66 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
    return(p)
 }
 
+# return a list of conditional entropies H(target|x), for each column in the data frame
+# for comparability, all variables are quantized into the same number of bins
+cond.entropy.data <- function(data, target, w='NULL', exclude.factor=NA) {
+   n.row <- nrow(data)
+   n.levels <- floor(max(2, min(log2(n.row), n.row/10))) # heuristic
+   data[[target]] <- quantize(data, target, y='NULL', w=w,
+                              max.breaks=n.levels, keep.breaks=n.levels, exclude.factor=exclude.factor);
+
+   cond.entropy.quantized <- function(data, x, y, w, n.levels, exclude.factor) {
+      if (x == y) {
+         return(0);
+      }
+      x.data <- quantize(data, x, y, max.breaks=n.levels, keep.breaks=n.levels, exclude.factor=exclude.factor);
+      # note: we need to make a copy for the special case of x=w
+      return(cond.entropy(cbind(data, .x=x.data), '.x', y, w, exclude.factor=exclude.factor))
+   }
+
+   sapply(names(data), function(x) cond.entropy.quantized(data=data,
+                                          x=x, y=target, w=w, n.levels=n.levels, exclude.factor=exclude.factor))
+}
+
+
 #'Create several plots at once with \code{plotluck}
 #'
 #'Create a number of 1D or 2D ggplots for the columns a data frame by calling
 #'\code{plotluck} repeatedly.
 #'@param data a data frame
-#'@param x,y column names, or "all"
+#'@param x, y column names, or \code{all}
 #'@param w weight column (optional)
 #'@param in.grid flag whether a grid of plots should be produced
+#'@param entropy.order order dependency plots by conditional entropy
 #'@param opts a named list of options (optional)
-#'@param ... additional parameters will be passed to \code{plotluck}
+#'@param ... additional parameters to be passed to \code{plotluck}
 #'@return an object of class plotluck_multi.
 #'
-#'  With \code{in.grid==TRUE}, produces a grid of plots, rendered as minimal
+#'  With \code{in.grid=TRUE}, produces a grid of plots, rendered as minimal
 #'  "spark lines" without annotations; otherwise, opens full plots in a separate
 #'  window each.
 #'
-#'  With \code{x==all} and \code{y==NULL}, a 1D plot for the distribution of
-#'  each variable is drawn. When \code{x} (resp. \code{y}) is set to a column
-#'  name and \code{y==all} (resp. \code{x=all}), a 2D plot is created with each
+#'  With \code{x=all} and \code{y=NULL}, a 1D plot for the distribution of each
+#'  variable is drawn. When \code{x} (resp. \code{y}) is set to a column name
+#'  and \code{y=all} (resp. \code{x=all}), a 2D plot is created with each
 #'  variable in \code{data} on the \code{y}-axis (resp. \code{x}-axis), in turn.
-#'  Finally, for \code{x==y==all}, a chart for each pair of variables is drawn,
+#'  Finally, for \code{x=y=all}, a chart for each pair of variables is drawn,
 #'  with a diagonal of 1D distribution plots; this is analogous to the behavior
 #'  of the default plot method for data frames, see
 #'  \code{\link{plot.data.frame}}.
 #'
+#'  With \code{entropy.order=TRUE}, when one target variable \code{t} is drawn
+#'  against all other columns \code{z}, the plots are sorted by an estimate of
+#'  empirical conditional entropy \code{H(t|z)}; the goal is to prioritize the
+#'  more predictive independent variables. For large data sets the calculation
+#'  can sometimes be time consuming; it can be suppressed by setting
+#'  \code{entropy.order=FALSE}. Entropy ordering is never applied for 1-D
+#'  distributions or a complete matrix of all variable pairs.
+#'
 #'@note The class \code{plotluck_multi} does not have any functionality; it's
 #'  sole purpose is to make this function work in the same way as \code{ggplot}
-#'  and \code{plotluck}: namely, do the actual plotting if and only if the
-#'  return value is not assigned.
+#'  and \code{plotluck}, namely, do the actual drawing if and only if the return
+#'  value is not assigned.
 #'
 #'@seealso \code{\link{plotluck}}
 #'@export
@@ -1681,12 +1799,14 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
 #' # All pairs of variables
 #' plotluck.multi(iris, all, all)
 
-plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL, in.grid=TRUE,
+plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL,
+                           in.grid=TRUE, entropy.order=TRUE,
                            opts=plotluck.options(), ...) {
 
    x <- deparse(substitute(x))
    y <- deparse(substitute(y))
    w <- deparse(substitute(w))
+   main <- deparse(substitute(data))
 
    if ((x == 'all' || x == 'NULL') && y == 'NULL') {
       # 1D
@@ -1704,6 +1824,22 @@ plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL, in.grid=TRUE,
       if (y == 'NULL') {
          y <- 'all'
       }
+   }
+
+   # if data size too large, apply sampling here; expensive to repeat
+   data <- sample.data(data, w, opts$max.sample.rows)
+
+   # if exactly one variable is specified, order plots by conditional entropy
+   if (entropy.order &&
+          length(which(c(x, y) == 'NULL')) == 0 &&
+          length(which(c(x, y) == 'all')) == 1) {
+      if (y == 'all') {
+         target <- x
+      } else {
+         target <- y
+      }
+      cond.ent <- cond.entropy.data(data, target, w=w)
+      data <- data[,order(cond.ent)]
    }
 
    vars <- list()
@@ -1729,8 +1865,6 @@ plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL, in.grid=TRUE,
    } else {
       combinations$ylab <- ''
    }
-
-   main <- deparse(substitute(data))
 
    if (!in.grid) {
       theme.multi <- ''
@@ -1796,6 +1930,8 @@ ggplotGrob <- function (x) {
 }
 
 
+# auxiliary class to achieve consistent behavior of plotluck.multi with ggplot
+# and plotluck: draw the plot if an only if the return value is not assigned.
 #'@export
 print.plotluck_multi <- function(x, ...) {
    if (x$in.grid) {
