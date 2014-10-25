@@ -41,7 +41,11 @@ an object of class plotluck_multi.
  against all other columns \code{z}, the plots are sorted by an estimate of
  empirical conditional entropy \code{H(t|z)}; the goal is to prioritize the
  more predictive independent variables. For large data sets the calculation
+<<<<<<< HEAD
  can sometimes be time consuming; it can be suppressed by setting
+=======
+ can sometimes be time consuming; it can be suppressed with
+>>>>>>> 713ccd407a1c421a548b486be91448e42179a18f
  \code{entropy.order=FALSE}. Entropy ordering is never applied for 1-D
  distributions or a complete matrix of all variable pairs.
 }
