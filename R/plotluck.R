@@ -9,13 +9,6 @@
 #Same for hexbin - only listed as 'suggests' in ggplot2 DeSCRIPTION.
 #'@importFrom hexbin hexbin
 #'
-# library(ggplot2)
-# library(plyr)
-# library(Hmisc) # wtd.quantile
-# library(scales)
-# library(quantreg) # for weighted box plots
-# library(grid) # unit
-# library(gridExtra)
 
 safe_log <- function(x,...) {
    ifelse(x<=0,0,log(x,...))
