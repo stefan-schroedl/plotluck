@@ -9,7 +9,7 @@ plotluck(data, x, y = NULL, z = NULL, w = NULL,
 \arguments{
 \item{data}{a data frame}
 
-\item{x,}{y, z column names}
+\item{x,y,z}{column names}
 
 \item{w}{weight column (optional)}
 

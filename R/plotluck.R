@@ -1022,7 +1022,7 @@ sample.data <- function(data, w='NULL', max.rows) {
 #' smoothing curves and median lines.
 #'
 #' @param data a data frame
-#' @param x, y, z column names
+#' @param x,y,z column names
 #' @param w weight column (optional)
 #' @param opts a named list of options (optional)
 #' @param ... additional parameters to be passed to the respective geom_* objects
@@ -1749,7 +1749,7 @@ cond.entropy.data <- function(data, target, w='NULL', exclude.factor=NA) {
 #'Create a number of 1D or 2D ggplots for the columns a data frame by calling
 #'\code{plotluck} repeatedly.
 #'@param data a data frame
-#'@param x, y column names, or \code{all}
+#'@param x,y column names, or \code{all}
 #'@param w weight column (optional)
 #'@param in.grid flag whether a grid of plots should be produced
 #'@param entropy.order order dependency plots by conditional entropy
