@@ -38,4 +38,6 @@ Imagine you have given a new R data frame, and would like to get an overview of 
 
 It is designed for generic out-of-the-box plotting, and not suitable to produce more specialized types of plots that arise in specific application domains (e.g., association, stem-and-leaf, star plots, geo maps, etc). It is restricted to at most three variables. Parallel plots with variables on different scales (such as time series of multiple related signals) are not supported.
 
+## Examples
 
+Visit the [wiki](https://github.com/stefan-schroedl/plotluck/wiki) to see example plots.
