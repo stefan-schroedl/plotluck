@@ -31,7 +31,7 @@ Imagine you have given a new R data frame, and would like to get an overview of 
 * If the data set is too large to plot, sampling is applied.
 * You can also create a grid of plots:
   * Distribution of each column in a data frame;
-  * One target column against all others, ordering plots by degree of dependency (conditional entropy)
+  * One target column against all others, ordering plots by degree of dependency (conditional entropy);
   * All pairs of columns. 
 
 ## What `plotluck` is _not_ built for
