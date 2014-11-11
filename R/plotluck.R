@@ -548,10 +548,16 @@ gplt.scatter <- function(data, x, y='NULL', w='NULL',
 
    if (!flip) {
       p <- ggplot(data, aes_string(x=x, y=y, weight=w,
-                                   ymax=max(y, na.rm=TRUE), xmax=max(x, na.rm=TRUE)))
+                                   ymin=min(y, na.rm=TRUE),
+                                   ymax=max(y, na.rm=TRUE),
+                                   xmin=min(x, na.rm=TRUE),
+                                   xmax=max(x, na.rm=TRUE)))
    } else {
       p <- ggplot(data, aes_string(x=y, y=x, weight=w,
-                                   ymax=max(x, na.rm=TRUE), xmax=max(y, na.rm=TRUE)))
+                                   ymin=min(x, na.rm=TRUE),
+                                   ymax=max(x, na.rm=TRUE),
+                                   xmin=min(y, na.rm=TRUE),
+                                   xmax=max(y, na.rm=TRUE)))
    }
 
    # dodging
@@ -560,6 +566,8 @@ gplt.scatter <- function(data, x, y='NULL', w='NULL',
       pos <- NULL
    } else {
       pos <- position_dodge(width=0.9)
+      # note: if aesthetics xmin/xmax left unspecified, dodge width affects
+      # diagram area!
    }
 
    if (convert.duplicates.to.weights) {
