@@ -573,29 +573,35 @@ gplt.scatter <- function(data, x, y='NULL', w='NULL',
    if (convert.duplicates.to.weights) {
       p <- p + geom_point(alpha=0.6,
                           position=pos, ...)
-   } else if (max(table(data[, c(x, y)])) >= min.points.jitter) {
-      # test for repeated points, optionally jitter
-      # - if both x and y are numeric, jitter in both directions
-      # - if one is a factor, only jitter in this direction
-      #   (enough empty space between levels)
-      if (num.x) {
-         if (num.y) {
-            w.jitter <- w.jitter * diff(range(data[[x]], na.rm=TRUE))
-            h.jitter <- h.jitter * diff(range(data[[y]], na.rm=TRUE))
+   } else {
+
+      if (max(table(data[, c(x, y)])) >= min.points.jitter) {
+         # test for repeated points, optionally jitter
+         # - if both x and y are numeric, jitter in both directions
+         # - if one is a factor, only jitter in this direction
+         #   (enough empty space between levels)
+         if (num.x) {
+            if (num.y) {
+               w.jitter <- w.jitter * diff(range(data[[x]], na.rm=TRUE))
+               h.jitter <- h.jitter * diff(range(data[[y]], na.rm=TRUE))
+            } else {
+               # num.x, !num.y
+               w.jitter <- 0
+               h.jitter <- factor.jitter
+            }
          } else {
-            # num.x, !num.y
-            w.jitter <- 0
-            h.jitter <- factor.jitter
+            # !num.x
+            if (num.y) {
+               w.jitter <- factor.jitter
+               h.jitter <- 0
+            } else {
+               w.jitter <- factor.jitter
+               h.jitter <- factor.jitter
+            }
          }
       } else {
-         # !num.x
-         if (num.y) {
-            w.jitter <- factor.jitter
-            h.jitter <- 0
-         } else {
-            w.jitter <- factor.jitter
-            h.jitter <- factor.jitter
-         }
+         w.jitter <- 0
+         h.jitter <- 0
       }
       p <- p + geom_point(alpha=0.6, position=position_jitter(width=w.jitter, height=h.jitter), ...)
    }
@@ -1890,8 +1896,8 @@ plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL,
 
       # use the limited space to make subgraphs
       # relatively rectangular
-      opts$max.facets.row <- NULL
-      opts$max.facets.row <- NULL
+      opts$max.facets.row    <- NULL
+      opts$max.facets.column <- NULL
 
       if (x == 'all' && y == 'all') {
          # write the axis labels only on the margins
