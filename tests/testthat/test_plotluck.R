@@ -38,7 +38,11 @@ if (exists('.debug') && .debug) {
 
 # load data
 data(iris)
-data(movies, package='ggplot2')
+if (!requireNamespace('ggplot2movies', quietly = TRUE)) {
+   install.packages('ggplot2movies')
+}
+data(movies, package='ggplot2movies')
+
 data(Titanic)
 data(occupationalStatus)
 data(diamonds, package='ggplot2')

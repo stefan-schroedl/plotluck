@@ -6,7 +6,7 @@
 #quantreg is not directly used in this code; however, ggplot needs it for
 #weighted box plots, and it is only listed as 'suggests' in the DESCRIPTION.
 #'@importFrom quantreg rq
-#Same for hexbin - only listed as 'suggests' in ggplot2 DeSCRIPTION.
+#Same for hexbin - only listed as 'suggests' in ggplot2 DESCRIPTION.
 #'@importFrom hexbin hexbin
 #'
 
@@ -563,7 +563,7 @@ gplt.scatter <- function(data, x, y='NULL', w='NULL',
    # dodging
 
    if (y == '.y_const') {
-      pos <- NULL
+      pos <- 'identity'
    } else {
       pos <- position_dodge(width=0.9)
       # note: if aesthetics xmin/xmax left unspecified, dodge width affects
@@ -622,11 +622,93 @@ gplt.scatter <- function(data, x, y='NULL', w='NULL',
    }
 
    if (flip) {
-     p <- p + coord_flip()
+      p <- p + coord_flip()
    }
 
    return(p)
 }
+
+# gplt.scatter <- function(data, x, y='NULL', w='NULL',
+#                          convert.duplicates.to.weights=TRUE,
+#                          min.points.jitter=3,
+#                          w.jitter=0.01,
+#                          h.jitter=0.01,
+#                          factor.jitter=0.25, ...) {
+#
+#    num.x <- is.numeric(data[[x]])
+#    pos <- 'identity'
+#
+#    if (y=='NULL') {
+#       # for line plots, make up a constant y coordinate
+#       data[['.y_const']] <- 1
+#       y <- '.y_const'
+#       # treat as factor
+#       num.y <- FALSE
+#    } else {
+#       num.y <- is.numeric(data[[y]])
+#    }
+#
+#    if (convert.duplicates.to.weights) {
+#       # record frequency/total weight for each unique row of the data
+#       if (w == 'NULL') {
+#          data <- ddply(data, names(data), function(D) nrow(D))
+#          names(data)[length(data)] <- '.freq.'
+#          w <- '.freq.'
+#       } else {
+#          data <- ddply(data, setdiff(names(data), w), function(D) sum(D[[w]]))
+#          names(data)[length(data)] <- w
+#          data[[w]] <- data[[w]] / min(data[[w]], na.rm=TRUE)
+#       }
+#
+#    } else { # convert.duplicates.to.weights
+#
+#       if (max(table(data[, c(x, y)])) >= min.points.jitter) {
+#          # test for repeated points, optionally jitter
+#          # - if both x and y are numeric, jitter in both directions
+#          # - if one is a factor, only jitter in this direction
+#          #   (enough empty space between levels)
+#          if (num.x) {
+#             if (num.y) {
+#                w.jitter <- w.jitter * diff(range(data[[x]], na.rm=TRUE))
+#                h.jitter <- h.jitter * diff(range(data[[y]], na.rm=TRUE))
+#             } else {
+#                # num.x, !num.y
+#                w.jitter <- 0
+#                h.jitter <- factor.jitter
+#             }
+#          } else {
+#             # !num.x
+#             if (num.y) {
+#                w.jitter <- factor.jitter
+#                h.jitter <- 0
+#             } else {
+#                w.jitter <- factor.jitter
+#                h.jitter <- factor.jitter
+#             }
+#          }
+#          pos = position_jitter(width=w.jitter, height=h.jitter)
+#       }
+#    }
+#
+#    p <-  ggplot(data, aes_string(x=x, y=y, weight=w)) + geom_point(alpha=0.6, position=pos, ...)
+#
+#    if (w != 'NULL' && length(unique(data[[w]])) > 1) {
+#       # add a shaded halo according to weights
+#       p <- p + geom_point(aes_string(size=w), position=pos, alpha=0.1, ...) +
+#          scale_size_area(max_size=10, guide=FALSE)
+#    }
+#
+#    if (y == '.y_const') {
+#       # no labels and ticks necessary
+#       p <- p + ylab(NULL) +
+#          theme(axis.ticks.y=element_blank(),
+#                axis.text.y=element_blank())
+#    } else if (num.x && num.y) {
+#       p <- p + geom_smooth()
+#    }
+#
+#    return(p)
+# }
 
 
 # heat map
@@ -807,7 +889,7 @@ gplt.box <- function(data, x, y, w='NULL', med='NULL', use.geom.violin=TRUE, ...
          # dodge does not work correctly when width is not specified
          # see https://github.com/hadley/ggplot2/issues/525
          p <- p + geom_point(mapping=aes_string(y=med),
-                             position=position_dodge(width=0.9, height=0),
+                             position=position_dodge(width=0.9),
                              size=2, shape=1)
       }
    } else {
@@ -829,7 +911,7 @@ gplt.density <- function(data, x, w='NULL', med='NULL',
 
       # geom_vline cannot be used, see https://github.com/hadley/ggplot2/issues/426
       if (med != 'NULL') {
-         p <- p + stat_vline(aes_string(x=med), xintercept='mean', lwd=1)
+         p <- p + geom_vline(aes(xintercept=.med.), lwd=1)
       }
 
       # density numbers themselves not very meaningful
@@ -1722,7 +1804,8 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
    }
 
    p <- p + theme(panel.background=element_blank(), # get rid of gray background
-                  axis.line=element_line(color='black'),
+                  axis.line.x=element_line(),
+                  axis.line.y=element_line(),
                   panel.grid=element_line(color='black'),
                   legend.position='bottom') # use maximum area for actual plot
 
