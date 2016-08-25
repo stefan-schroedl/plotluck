@@ -17,9 +17,11 @@ Imports:
     quantreg (>= 5.05),
     scales (>= 0.2.3),
     plyr (>= 1.7.1),
-    gridExtra (>= 0.9.0),
+    grid (>= 3.3.1),
     hexbin (>= 1.27)
 License: MIT + file LICENSE
 LazyData: true
 Suggests:
-    testthat
+    testthat,
+    ggplot2movies
+RoxygenNote: 5.0.1

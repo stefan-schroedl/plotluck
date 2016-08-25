@@ -1,8 +1,8 @@
 #'@import ggplot2
+#'@import grid
 #'@importFrom scales trans_new identity_trans
 #'@importFrom plyr ddply summarise .
 #'@importFrom Hmisc wtd.mean wtd.quantile
-#'@importFrom gridExtra grid.arrange
 #quantreg is not directly used in this code; however, ggplot needs it for
 #weighted box plots, and it is only listed as 'suggests' in the DESCRIPTION.
 #'@importFrom quantreg rq
@@ -953,7 +953,8 @@ gplt.blank <- function(text=NULL, ...) {
       theme(axis.ticks.x=element_blank(),
             axis.text.x=element_blank(),
             axis.ticks.y=element_blank(),
-            axis.text.y=element_blank())
+            axis.text.y=element_blank(),
+            panel.background=element_blank())
 
    if (!is.null(text)) {
       p <- p + annotate('text', x=0.5, y=0.5, label=text, hjust=0.5, vjust=0.5)
@@ -1843,7 +1844,9 @@ cond.entropy.data <- function(data, target, w='NULL', exclude.factor=NA) {
 #'@param w weight column (optional)
 #'@param in.grid flag whether a grid of plots should be produced
 #'@param entropy.order order dependency plots by conditional entropy
-#'@param opts a named list of options (optional)
+#'@param max.cols,max.rows maximum number of plots to put on one page. If
+#'       necessary, multiple pages are generated.
+#'@param opts a named list of \code{plotluck} options (optional)
 #'@param ... additional parameters to be passed to \code{plotluck}
 #'@return an object of class plotluck_multi.
 #'
@@ -1868,7 +1871,7 @@ cond.entropy.data <- function(data, target, w='NULL', exclude.factor=NA) {
 #'  \code{entropy.order=FALSE}. Entropy ordering is never applied for 1-D
 #'  distributions or a complete matrix of all variable pairs.
 #'
-#'@note The class \code{plotluck_multi} does not have any functionality; it's
+#'@note The class \code{plotluck_multi} does not have any functionality; its
 #'  sole purpose is to make this function work in the same way as \code{ggplot}
 #'  and \code{plotluck}, namely, do the actual drawing if and only if the return
 #'  value is not assigned.
@@ -1891,7 +1894,9 @@ cond.entropy.data <- function(data, target, w='NULL', exclude.factor=NA) {
 
 plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL,
                            in.grid=TRUE, entropy.order=TRUE,
-                           opts=plotluck.options(), ...) {
+                           max.rows=10, max.cols=10,
+                           opts=plotluck.options(),
+                           ...) {
 
    x <- deparse(substitute(x))
    y <- deparse(substitute(y))
@@ -1956,6 +1961,13 @@ plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL,
       combinations$ylab <- ''
    }
 
+   # try to make a square layout
+   cols <- ceiling(sqrt(nrow(combinations)))
+   rows <- ceiling(nrow(combinations)/cols)
+
+   suppress.xlab <- FALSE
+   suppress.ylab <- FALSE
+
    if (!in.grid) {
       theme.multi <- ''
    } else {
@@ -1970,7 +1982,9 @@ plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL,
          strip.background=element_blank(),
          strip.text=element_blank(),
          panel.grid.major=element_blank(),
-         panel.grid.minor=element_blank())"
+         panel.grid.minor=element_blank(),
+         axis.title.x=element_text(size=rel(0.7)),
+         axis.title.y=element_text(size=rel(0.7)))"
 
       theme.multi <- gsub('\\s','', theme.multi)
 
@@ -1982,53 +1996,114 @@ plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL,
       opts$max.facets.row    <- NULL
       opts$max.facets.column <- NULL
 
-      if (x == 'all' && y == 'all') {
+      # does everything fit on one page?
+      is.square <- TRUE
+      if (cols > max.cols || cols > max.rows) {
+         is.square <- FALSE
+         cols <- max.cols
+         rows <- min(max.rows, ceiling(nrow(combinations) / cols))
+      }
+      if (x == 'all' && y == 'all' && is.square) {
+         # if the full cross product fits on one page,
          # write the axis labels only on the margins
-         combinations$xlab[combinations$y != names(data)[length(data)]] <- ' + xlab(NULL)'
-         combinations$ylab[combinations$x != names(data)[1]]  <- ' + ylab(NULL)'
+         suppress.xlab <- 'margin'
+         suppress.ylab <- 'margin'
       }
       if (x != 'all') {
          # do not repeat the axis label for the constant dimension
-         combinations$xlab <- ' + xlab(NULL)'
          if (x != 'NULL') {
             main <- x
+            suppress.xlab <- 'margin'
+         }
+         else {
+            # distribution/density plot
+            suppress.xlab <- 'all'
          }
       }
       if (y != 'all') {
-         combinations$ylab <- ' + ylab(NULL)'
          if (y != 'NULL') {
             main <- y
+            suppress.ylab <- 'margin'
+         } else {
+            suppress.ylab <- 'all'
          }
       }
    }
 
-   call.strs <- sprintf('try.plot(plotluck(data,x=%s, y=%s, w=%s, opts=opts, ...))%s%s%s',
-                        combinations$x, combinations$y, w, combinations$xlab, combinations$ylab, theme.multi)
+   call.strs <- sprintf('plotluck(data,x=%s, y=%s, w=%s, opts=opts, ...)%s%s%s',
+      combinations$x, combinations$y, w, combinations$xlab, combinations$ylab, theme.multi)
 
    call.str <- sprintf('list(%s)', paste(call.strs, collapse=','))
-   try.plot <- function(expr) {p <- try(expr); if (!is.character(p)) {return(p)} else {return(gplt.blank(geterrmessage()))}}
-
-   plots <- eval(parse(text=call.str))
-   ret <- structure(list(plots=plots, in.grid=in.grid, main=main), class='plotluck_multi')
-   return(ret)
+   structure(list(plots=eval(parse(text=call.str)),
+                  in.grid=in.grid,
+                  cols=cols,
+                  rows=rows,
+                  suppress.xlab=suppress.xlab,
+                  suppress.ylab=suppress.ylab,
+                  main=main),
+             class='plotluck_multi')
 }
 
-# HACK to avoid 'Error: could not find function "ggplotGrob"'
-#'@export
-ggplotGrob <- function (x) {
-   ggplot2::ggplot_gtable(ggplot2::ggplot_build(x))
-}
+# plot multiple graphs in a grid layout, possibly over multiple pages
+mplot <- function(plots, rows=ceiling(sqrt(length(plots))),
+                  cols=ceiling(sqrt(length(plots))),
+                  suppress.xlab=FALSE, suppress.ylab=FALSE) {
 
+   num.plots <- length(plots)
+   if (cols > num.plots) {
+      cols <- num.plots
+      rows <- 1
+   }
+
+   size.page <- rows * cols
+
+   layout <- matrix(seq(1, size.page),
+               ncol=cols, nrow=rows, byrow=TRUE)
+
+   for (p in 1:ceiling(num.plots/size.page)) {
+
+      grid.newpage()
+      pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+      # Make each plot, in the correct location
+      for (i in 1:min(size.page, num.plots-(p-1)*size.page)) {
+         # Get the i,j matrix positions of the regions that contain this subplot
+         matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+         plot.idx <- (p-1)*size.page+i
+         plot.current <- plots[[plot.idx]]
+
+         # suppress.*lab == 'margin' means:
+         # no x-axis labels except at the bottom;
+         # no y-axis labels except in the leftmost plots
+         if (suppress.xlab == 'all' ||
+             (suppress.xlab == 'margin' && matchidx$row != rows
+              && plot.idx + cols <= num.plots)) { # last complete row
+            plot.current <- plot.current + xlab(NULL)
+         }
+         if (suppress.ylab == 'all' ||
+             (suppress.ylab == 'margin' && matchidx$col != 1)) {
+            plot.current <- plot.current + ylab(NULL)
+         }
+
+         # do not fail if a single subplot isn't well-defined
+         tryCatch(
+            print(plot.current, vp = viewport(layout.pos.row = matchidx$row,
+                                            layout.pos.col = matchidx$col)),
+            error = function(e) print(gplt.blank(e), vp = viewport(layout.pos.row = matchidx$row,
+                                                                layout.pos.col = matchidx$col)))
+      }
+   }
+}
 
 # auxiliary class to achieve consistent behavior of plotluck.multi with ggplot
 # and plotluck: draw the plot if an only if the return value is not assigned.
 #'@export
 print.plotluck_multi <- function(x, ...) {
    if (x$in.grid) {
-      do.call(function(...) grid.arrange(main=x$main, ...), x$plots)
+       mplot(x$plots, rows=x$rows, cols=x$cols,
+             suppress.xlab=x$suppress.xlab, suppress.ylab=x$suppress.ylab)
    } else {
       lapply(x$plots, print)
    }
 }
-
 
