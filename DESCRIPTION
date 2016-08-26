@@ -1,7 +1,9 @@
 Package: plotluck
 Title: GGPlot2 version of 'I'm Feeling Lucky!'
-Version: 0.1
+Version: 1.0
 Authors@R: "Stefan Schroedl <stefan.schroedl@gmx.de> [aut, cre]"
+Author: Stefan Schroedl <stefan.schroedl@gmx.de>
+Maintainer: Stefan Schroedl <stefan.schroedl@gmx.de>
 Description: A tool for quickly generating ggplots during exploratory data
     analysis with the aim of letting the user focus on what to plot, not
     on the how. Plotluck examines the data characteristics of one, two, or
@@ -10,18 +12,20 @@ Description: A tool for quickly generating ggplots during exploratory data
     observation weights,log-scaling of axes, reordering of factor levels, and
     overlays of smoothing curves and median lines.
 Depends:
-    R (>= 3.0.0)
+    R (>= 3.3.1)
 Imports:
-    ggplot2 (>= 1.0.0),
-    Hmisc (>= 3.14.5),
-    quantreg (>= 5.05),
-    scales (>= 0.2.3),
-    plyr (>= 1.7.1),
+    ggplot2 (>= 2.1.0),
+    Hmisc (>= 3.17.4),
+    quantreg (>= 5.26),
+    scales (>= 0.4.0),
+    plyr (>= 1.8.4),
     grid (>= 3.3.1),
-    hexbin (>= 1.27)
+    hexbin (>= 1.27.1)
 License: MIT + file LICENSE
 LazyData: true
 Suggests:
     testthat,
-    ggplot2movies
+    ggplot2movies,
+    mgcv,
+    nlme
 RoxygenNote: 5.0.1

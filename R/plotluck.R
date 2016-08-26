@@ -1,33 +1,37 @@
 #'@import ggplot2
-#'@import grid
-#'@importFrom scales trans_new identity_trans
 #'@importFrom plyr ddply summarise .
-#'@importFrom Hmisc wtd.mean wtd.quantile
-#quantreg is not directly used in this code; however, ggplot needs it for
-#weighted box plots, and it is only listed as 'suggests' in the DESCRIPTION.
-#'@importFrom quantreg rq
-#Same for hexbin - only listed as 'suggests' in ggplot2 DESCRIPTION.
-#'@importFrom hexbin hexbin
-#'
+#'@importFrom stats as.formula median quantile runif xtabs
 
 safe_log <- function(x,...) {
    ifelse(x<=0,0,log(x,...))
 }
 
-medians.per.group <- function(data, x, w, group.vars) {
-   if (w == 'NULL') {
-      grp.med <- ddply(data, group.vars, function(D) median(D[[x]], na.rm=TRUE))
-   } else {
-      # workaround for problems in wtd.quantile:
-      # - if all values are NA, wtd.mean throws error: 'zero non-NA points'
-      # - if weights are integer, sum can lead to NA due to overflow (conversion to double in plotluck)
-      f <- function(D) if (all(is.na(D[[x]]))) { NA } else { wtd.quantile(D[[x]], weights=D[[w]], probs=0.5, na.rm=TRUE, normwt=TRUE) }
-      grp.med <- ddply(data, group.vars, f)
-   }
-   names(grp.med)[length(grp.med)] <- '.med.'
-   return(grp.med)
-}
+group.center <- function(data, x, group.vars, w='NULL', method='median') {
 
+   if (method == 'median') {
+      fun <- median
+   } else if (method == 'mean') {
+      fun <- mean
+   } else {
+      stop(sprintf('group.center unknown function: %s', fun))
+   }
+
+   if (w == 'NULL') {
+      grp.center <- ddply(data, group.vars, function(d) fun(d[[x]], na.rm=TRUE))
+   } else {
+      if (method == 'median') {
+         # workaround for problems in wtd.quantile:
+         # - if all values are NA, wtd.mean throws error: 'zero non-NA points'
+         # - if weights are integer, sum can lead to NA due to overflow (conversion to double in plotluck)
+         f <- function(d) if (all(is.na(d[[x]]))) { NA } else { Hmisc::wtd.quantile(d[[x]], weights=d[[w]], probs=0.5, na.rm=TRUE, normwt=TRUE) }
+         grp.center <- ddply(data, group.vars, f)
+      } else {
+         grp.center <- ddply(data, group.vars, function(d) Hmisc::wtd.mean(d[[x]], d[[w]], na.rm=TRUE))
+      }
+   }
+   names(grp.center)[length(grp.center)] <- '.center.'
+   return(grp.center)
+}
 
 # calculate axis scale transform based on value distribution
 # either:
@@ -40,7 +44,7 @@ get.trans.fun <- function(x, expansion.thresh=2) {
 
    if (!is.numeric(x) ||
           length(unique(x)) <= 2) {
-      return(identity_trans())
+      return(scales::identity_trans())
    }
 
    q <- quantile(x, c(0, 0.25, 0.5, 0.75, 1), na.rm=TRUE)
@@ -79,7 +83,7 @@ get.trans.fun <- function(x, expansion.thresh=2) {
    if (ratio.after > expansion.thresh * ratio.before) {
       return(fun.trans)
    } else {
-      return(identity_trans())
+      return(scales::identity_trans())
    }
 }
 
@@ -185,7 +189,7 @@ log_mod_trans <- function(base = exp(1), offset=0)
       inv   <- function(x) sign(x) * (base^abs(x) - offset)
       domain = c(-Inf, Inf)
    }
-   trans_new(paste0("log-mod-", format(base)),
+   scales::trans_new(paste0("log-mod-", format(base)),
              trans,
              inv,
              log_mod_breaks(base=base, offset=offset),
@@ -235,8 +239,8 @@ order.factor.freq <- function(data, x, w='NULL', decreasing=TRUE,
 }
 
 
-# return levels of (unordered) factor, sorted by (weighted) mean of dependent variable
-order.factor.mean <- function(data, x, y, w='NULL', decreasing=TRUE, exclude.factor=NA) {
+# return levels of (unordered) factor x, sorted by (weighted) mean of dependent variable y
+order.factor.value <- function(data, x, y, w='NULL', decreasing=TRUE, exclude.factor=NA) {
 
    if (y == 'NULL' || y == x) {
       return(order.factor.freq(data,x, w, decreasing, exclude.factor=exclude.factor))
@@ -254,18 +258,18 @@ order.factor.mean <- function(data, x, y, w='NULL', decreasing=TRUE, exclude.fac
          return(levels(x.data))
       } else {
          # for an ordered factor, consider integer levels
-         y.data <- as.numeric(y.data)
+         data[[y]] <- as.numeric(data[[y]])
       }
    }
 
-   if (w=='NULL') {
-      means <- ddply(data.frame(x=x.data,y=y.data), 'x', summarise, m=mean(y, na.rm=TRUE))
-   } else {
-      means <- ddply(data.frame(x=x.data, y=y.data, w=data[[w]]),
-                     'x', summarise, m=Hmisc::wtd.mean(y, w, na.rm=TRUE))
+   means <- group.center(data, y, x, w)
+
+   # if medians are equal for two or more classes, order by mean
+   if (length(unique(means$.center.)) != nrow(means)) {
+      means <- group.center(data, y, x, w, method='mean')
    }
-   ord <- order(means$m, decreasing=decreasing)
-   return(means[ord, 'x'])
+   ord <- order(means$.center., decreasing=decreasing)
+   return(means[ord, x])
 }
 
 
@@ -319,7 +323,9 @@ preprocess.factors <- function(data, x, w='NULL',
    }
 
    # suppress unused levels
-   return(droplevels(x.data))
+   # for NA treatment, see http://r.789695.n4.nabble.com/droplevels-inappropriate-change-td4723942.html
+   # droplevels(x.data, exclude=exclude.factor) does not seem to be working correctly
+   return(x.data[,drop=T])
 }
 
 
@@ -385,7 +391,7 @@ quantize <- function(data, x,
    if (!is.numeric(data[[x]])) {
       # order levels
       data[[x]] <- as.factor(x.data)
-      x.levels <- order.factor.mean(data, x, y, w, decreasing=TRUE, exclude.factor=exclude.factor)
+      x.levels <- order.factor.value(data, x, y, w, decreasing=TRUE, exclude.factor=exclude.factor)
       x.data <- factor(x.data, levels=x.levels, exclude=exclude.factor)
       # treat as integers for binning
       x.data <- as.integer(x.data)
@@ -397,12 +403,12 @@ quantize <- function(data, x,
       if (w=='NULL') {
          breaks <- quantile(x.data, probs=probs, na.rm=TRUE)
       } else {
-         breaks <- wtd.quantile(x.data, weights=data[[w]],
+         breaks <- Hmisc::wtd.quantile(x.data, weights=data[[w]],
                                 probs=probs, na.rm=TRUE, normwt=TRUE)
       }
    } else {
       n.breaks <- nclass.FD.modified(x.data, max.breaks)
-      breaks <- hist(x.data, breaks=n.breaks, plot=FALSE)$breaks
+      breaks <- graphics::hist(x.data, breaks=n.breaks, plot=FALSE)$breaks
    }
 
    if (!is.numeric(data[[x]])) {
@@ -570,9 +576,17 @@ gplt.scatter <- function(data, x, y='NULL', w='NULL',
       # diagram area!
    }
 
-   if (convert.duplicates.to.weights) {
-      p <- p + geom_point(alpha=0.6,
-                          position=pos, ...)
+
+   alpha <- 0.6
+   if (nrow(data) > 1000) {
+      # if there are a lot of points, better make them transparent
+      alpha = 0.1
+   }
+
+   if (use.weights) {
+      p <- p + geom_point(aes_string(size=w), alpha=alpha,
+                          position=pos, ...) +
+            scale_size_area(guide=FALSE)
    } else {
 
       if (max(table(data[, c(x, y)])) >= min.points.jitter) {
@@ -603,13 +617,12 @@ gplt.scatter <- function(data, x, y='NULL', w='NULL',
          w.jitter <- 0
          h.jitter <- 0
       }
-      p <- p + geom_point(alpha=0.6, position=position_jitter(width=w.jitter, height=h.jitter), ...)
-   }
-
-   if (use.weights) {
-      # add a shaded halo according to weights
-      p <- p + geom_point(aes_string(size=w), position=pos, alpha=0.1, ...) +
-         scale_size_area(max_size=10, guide=FALSE)
+      if (flip) {
+         tmp      <- w.jitter
+         w.jitter <- h.jitter
+         h.jitter <- tmp
+      }
+      p <- p + geom_point(alpha=alpha, position=position_jitter(width=w.jitter, height=h.jitter), ...)
    }
 
    if (y == '.y_const') {
@@ -618,7 +631,13 @@ gplt.scatter <- function(data, x, y='NULL', w='NULL',
          theme(axis.ticks.y=element_blank(),
                axis.text.y=element_blank())
    } else if (num.x && num.y) {
-      p <- p + geom_smooth()
+      if (w == 'NULL' || w == '.freq.') {
+         # note: for more than 1000 points, ggplot2 uses mgcv package,
+         # leads to weird dependency issue
+            p <- p + geom_smooth(fill='cornflowerblue', color='cornflowerblue', alpha=0.2)
+         } else {
+            p <- p + geom_smooth(aes(weight=w), fill='cornflowerblue', color='cornflowerblue', alpha=0.2)
+         }
    }
 
    if (flip) {
@@ -628,6 +647,7 @@ gplt.scatter <- function(data, x, y='NULL', w='NULL',
    return(p)
 }
 
+# simpler version of gplt.scatter without flipping
 # gplt.scatter <- function(data, x, y='NULL', w='NULL',
 #                          convert.duplicates.to.weights=TRUE,
 #                          min.points.jitter=3,
@@ -723,20 +743,13 @@ gplt.heat <- function(data, x, y, z, w='NULL', ...) {
    z.data <- data[[z]]
 
    # compute (weighted) means
-   if (w=='NULL') {
-      means <- ddply(data.frame(x=x.data, y=y.data, z=z.data), .(x, y),
-                     summarise,
-                     m=mean(z, na.rm=TRUE))
-   } else {
-      means <- ddply(data.frame(x=x.data, y=y.data,z=z.data, w=data[[w]]), .(x, y),
-                     summarise,
-                     m=Hmisc::wtd.mean(z, w, na.rm=TRUE))
-   }
+
+   means <- group.center(data, z, c(x, y), w=w, method='mean')
    names(means) <- c(x, y, z)
 
    p <- ggplot(means, aes_string(x=x, y=y, fill=z)) +
       geom_tile(color=NA, ...) +
-      scale_fill_gradientn(colours=rev(rainbow(2)))
+      scale_fill_gradientn(colours=rev(grDevices::rainbow(2)))
    return(p)
 }
 
@@ -911,7 +924,7 @@ gplt.density <- function(data, x, w='NULL', med='NULL',
 
       # geom_vline cannot be used, see https://github.com/hadley/ggplot2/issues/426
       if (med != 'NULL') {
-         p <- p + geom_vline(aes(xintercept=.med.), lwd=1)
+         p <- p + geom_vline(aes(xintercept=.center.), lwd=1)
       }
 
       # density numbers themselves not very meaningful
@@ -925,7 +938,7 @@ gplt.density <- function(data, x, w='NULL', med='NULL',
          n.breaks <- nclass.FD.modified(data[[x]])
       }
       bin.width <- diff(range(data[[x]], na.rm=TRUE))/n.breaks
-      p <- p + geom_histogram(binwidth=bin.width, ...)
+      p <- p + geom_histogram(binwidth=bin.width, position='identity', ...)
    }
 
    return(p)
@@ -938,7 +951,7 @@ gplt.hex <- function(data, x, y, w='NULL', ...) {
       geom_hex(...) +
       geom_smooth() +
       # log scaling of color often reveals more details
-      scale_fill_gradientn(colours=rev(rainbow(2)), trans='log')
+      scale_fill_gradientn(colours=rev(grDevices::rainbow(2)), trans='log')
    return(p)
 }
 
@@ -1299,11 +1312,10 @@ sample.data <- function(data, w='NULL', max.rows) {
 #' plotluck(iris, Petal.Length)
 #'
 #'  # bar plot
-#' data(movies, package='ggplot2')
+#' data(movies, package='ggplot2movies')
 #' plotluck(movies, mpaa)
 #'
-#' #2D
-#' # scatter plot
+#' # 2D scatter plot
 #' plotluck(iris, Petal.Length, Petal.Width)
 #' plotluck(movies,votes,rating)
 #'
@@ -1363,7 +1375,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       if (n.val != 'null') {
          idx <- pmatch(tolower(n.val), cols.lc)
          if (is.na(idx)) {
-            idx <- which(!is.na(pmatch(tolower(n.val), cols.lc)))
+            # if several are matching, find all of them
             idx <- which(!is.na(sapply(cols.lc, function(tab, x) pmatch(x, tab), x=n.val)))
 
             if (length(idx) == 0) {
@@ -1412,7 +1424,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
          warning('Weight is NA for %d instances, deleting', length(which(weight.na)))
          data <- data[!weight.na,]
       }
-      # if weights are integer, wtd.quantile() can lead to NA due to overflow
+      # if weights are integer, Hmisc::wtd.quantile() can lead to NA due to overflow
       data[[w]] <- as.double(data[[w]])
    }
 
@@ -1435,7 +1447,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       }
    }
 
-   trans       <- list('NULL'=identity_trans())
+   trans       <- list('NULL'=scales::identity_trans())
    is.num      <- list('NULL'=FALSE)
    is.ord      <- list('NULL'=FALSE)
    uniq        <- list('NULL'=0)
@@ -1491,7 +1503,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
 
    for (n in vars.non.numeric) {
       data[[n]] <- factor(data[[n]],
-                          levels=order.factor.mean(data, n, order.by[[n]], w, exclude.factor=exclude.factor),
+                          levels=order.factor.value(data, n, order.by[[n]], w, exclude.factor=exclude.factor),
                           exclude=exclude.factor)
    }
 
@@ -1511,7 +1523,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       if (is.num[[z]]) {
          data[[z]] <- quantize(data, z, w=w, max.breaks=opts$discretize.intervals.z)
          data[[z]] <- factor(data[[z]],
-                             levels=order.factor.mean(data, z, order.by[[z]], w,
+                             levels=order.factor.value(data, z, order.by[[z]], w,
                                                       exclude.factor=exclude.factor),
                              exclude=exclude.factor)
          trans[[z]]       <- get.trans.fun(data[[z]], opts$trans.log.thresh)
@@ -1532,7 +1544,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       # https://groups.google.com/forum/#!topic/ggplot2/z_wHIzwSSzM
 
       if (length(vars.numeric) == 1) {
-         grp.med <- medians.per.group(data, vars.numeric[1], w, vars.non.numeric)
+         grp.med <- group.center(data, vars.numeric[1], vars.non.numeric, w=w)
          data <- merge(data, grp.med)
       }
 
@@ -1585,7 +1597,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
                }
             }
 
-            p <- gplt.density(data, x, w=w, med='.med.',
+            p <- gplt.density(data, x, w=w, med='.center.',
                               use.geom.density=opts$use.geom.density,
                               n.breaks.histogram=opts$n.breaks.histogram,
                               alpha=opts$alpha.default, ...)
@@ -1627,7 +1639,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
             if (use.geom.violin && num.level > opts$max.levels.violin) {
                use.geom.violin <- FALSE
             }
-            p <- gplt.box(data, x, y, w=w, med='.med.',
+            p <- gplt.box(data, x, y, w=w, med='.center.',
                           use.geom.violin=use.geom.violin,
                           alpha=opts$alpha.default, ...)
          } else if (n.max.level > 1) {
@@ -1679,6 +1691,8 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
             scale_color_manual(values=opts$fill.default)
          color.guides <- FALSE
       } else {
+         # might be overwritten in 1734, but no harm in coloring in either case,
+         # even for wrapping
          p <- p + aes_string(fill=y) +
             aes_string(color=y)
             color.guides <- FALSE
@@ -1731,6 +1745,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
 
    # the remaining variables will be faceted
    if (length(vars.remaining) == 2) {
+      p <- p + opts$theme.axis.x.factor # axis text can easily overlap in small diagrams
       p <- p + facet_grid(
          as.formula(sprintf('facet.label.%s~facet.label.%s', vars.remaining[1], vars.remaining[2])))
    } else if (length(vars.remaining) == 1) {
@@ -1747,12 +1762,16 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       }
       ncol <- NULL
       nrow <- NULL
+      switch <- NULL
       if (preferred.order == 'col') {
          nrow <- opts$max.facets.row
+         switch <- 'y'
       } else  if (preferred.order == 'row') {
+         p <- p + opts$theme.axis.x.factor  # axis text can easily overlap in small diagrams
          ncol <- opts$max.facets.column
+         switch <- 'x'
       }
-      p <- p + facet_wrap(as.formula(sprintf('~facet.label.%s', vars.remaining[1])), nrow=nrow, ncol=ncol)
+      p <- p + facet_wrap(as.formula(sprintf('~facet.label.%s', vars.remaining[1])), nrow=nrow, ncol=ncol, switch = switch)
    }
 
    # labels
@@ -1805,10 +1824,13 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
    }
 
    p <- p + theme(panel.background=element_blank(), # get rid of gray background
+                  strip.background = element_blank(), # no background for facet labels
                   axis.line.x=element_line(),
                   axis.line.y=element_line(),
                   panel.grid=element_line(color='black'),
-                  legend.position='bottom') # use maximum area for actual plot
+                  legend.position='bottom', # use maximum area for actual plot
+                  legend.text=element_text(angle=-45), # avoid overlapping tick text
+                  legend.text.align=0) # use instead of hjust/vjust (these are not doing anything above))
 
    return(p)
 }
@@ -2062,8 +2084,8 @@ mplot <- function(plots, rows=ceiling(sqrt(length(plots))),
 
    for (p in 1:ceiling(num.plots/size.page)) {
 
-      grid.newpage()
-      pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+      grid::grid.newpage()
+      grid::pushViewport(grid::viewport(layout = grid::grid.layout(nrow(layout), ncol(layout))))
 
       # Make each plot, in the correct location
       for (i in 1:min(size.page, num.plots-(p-1)*size.page)) {
@@ -2087,9 +2109,9 @@ mplot <- function(plots, rows=ceiling(sqrt(length(plots))),
 
          # do not fail if a single subplot isn't well-defined
          tryCatch(
-            print(plot.current, vp = viewport(layout.pos.row = matchidx$row,
+            print(plot.current, vp = grid::viewport(layout.pos.row = matchidx$row,
                                             layout.pos.col = matchidx$col)),
-            error = function(e) print(gplt.blank(e), vp = viewport(layout.pos.row = matchidx$row,
+            error = function(e) print(gplt.blank(e), vp = grid::viewport(layout.pos.row = matchidx$row,
                                                                 layout.pos.col = matchidx$col)))
       }
    }

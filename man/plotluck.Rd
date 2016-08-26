@@ -210,11 +210,10 @@ data(iris)
 plotluck(iris, Petal.Length)
 
  # bar plot
-data(movies, package='ggplot2')
+data(movies, package='ggplot2movies')
 plotluck(movies, mpaa)
 
-#2D
-# scatter plot
+# 2D scatter plot
 plotluck(iris, Petal.Length, Petal.Width)
 plotluck(movies,votes,rating)
 

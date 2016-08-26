@@ -84,11 +84,13 @@ test_that_ref("2d_scatter", "2D scatter", {
    eq_ref(plotluck(iris, Petal.Length, Petal.Width))
 
    # hex
+   # note: when running devtools::check(), weird dependency problem with mgce,
+   #  nlme; comment out the following three tests
    eq_ref(plotluck(movies, votes, rating))
 
    # scatter
    eq_ref(plotluck(movies, votes, rating,
-                   opts=plotluck.options(min.points.hex = 1E20)))
+                  opts=plotluck.options(min.points.hex = 1E20)))
 
    # scatter, no log scaling
    eq_ref(plotluck(movies, votes, rating,
