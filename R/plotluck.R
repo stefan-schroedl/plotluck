@@ -494,6 +494,21 @@ is.grid.like <- function(data, x, y, z, min.size=3, min.coverage=0.5) {
    u >= min.coverage * ux * uy
 }
 
+# some common themes
+theme_panel_num_x <-
+   theme(panel.grid.major.x=element_line(color='black', linetype='dotted'),
+         panel.grid.minor.x=element_line(color='black',linetype='dotted'))
+theme_panel_num_y <-
+   theme(panel.grid.major.y=element_line(color='black', linetype='dotted'),
+         panel.grid.minor.y=element_line(color='black',linetype='dotted'))
+# points on the grid line are hard to see; remove grid line for factors
+theme_panel_fac_x <- theme(panel.grid.major.x=element_blank(),
+                           panel.grid.minor.x=element_blank())
+theme_panel_fac_y <- theme(panel.grid.major.y=element_blank(),
+                           panel.grid.minor.y=element_blank())
+# for factors, write horizontal axis labels at an angle to avoid overlap
+theme_slanted_text_x <- theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=1))
+
 
 # 2D scatter plot of numeric or factor variables
 # - overlay smoothing line if both variables are numeric
@@ -620,15 +635,22 @@ gplt.scatter <- function(data, x, y, w='NULL',
    ylab <- trans.y[[2]]
 
    p <- p + xlab(xlab) + ylab(ylab)
-   if (num.y) {
-      p <- p + scale_y_continuous(trans=trans.y[[1]])
-   }
+
    if (num.x) {
-      p <- p + scale_x_continuous(trans=trans.x[[1]])
+      p <- p + scale_x_continuous(trans=trans.x[[1]]) +
+         theme_panel_num_x
    } else {
-      # for factors, write horizontal axis labels at an angle to avoid overlap
-      p <- p + theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=1))
+      p <- p + theme_slanted_text_x +
+            theme_panel_fac_x
    }
+
+   if (num.y) {
+      p <- p + scale_y_continuous(trans=trans.y[[1]]) +
+       theme_panel_num_y
+   } else {
+      p <- p + theme_panel_fac_y
+   }
+
    p
 }
 
@@ -708,7 +730,7 @@ gplt.spine <- function(data, x, y, w='NULL',
       # y reflected in color legend
       xlab(x) + ylab('') +
       # for factors, write horizontal axis labels at an angle to avoid overlap
-      theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=1))
+      theme_slanted_text_x
 }
 
 
@@ -788,9 +810,7 @@ gplt.bar <- function(data, x, w='NULL', ...) {
    } else {
       p <- p + ylab(w)
    }
-   p +
-   # for factors, write horizontal axis labels at an angle to avoid overlap
-   theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=1))
+   p + theme_slanted_text_x + theme_panel_fac_x + theme_panel_num_y
 }
 
 # bar plot with single point each
@@ -798,9 +818,8 @@ gplt.bar <- function(data, x, w='NULL', ...) {
 gplt.bar.identity <- function(data, x, y, z='NULL', w='NULL', ...) {
    ggplot(data, aes_string(x=x, y=y, color=z, weight=w)) +
       geom_bar(stat='identity', position=position_dodge(), ...) +
-      # for factors, write horizontal axis labels at an angle to avoid overlap
-      theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=1)) +
-      xlab(x) + ylab(y)
+      xlab(x) + ylab(y) +
+      theme_slanted_text_x + theme_panel_fac_x + theme_panel_num_y
 }
 
 # violin plot with overlayed median points
@@ -838,8 +857,7 @@ gplt.violin <- function(data, x, y, w='NULL',
    ylab <- trans.y[[2]]
 
    p + scale_y_continuous(trans=trans.y[[1]]) + xlab(xlab) + ylab(ylab) +
-      # for factors, write horizontal axis labels at an angle to avoid overlap
-      theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=1))
+      theme_slanted_text_x + theme_panel_fac_x + theme_panel_num_y
 }
 
 
@@ -864,8 +882,7 @@ gplt.box <- function(data, x, y, w='NULL',
    ggplot(data, aes_string(x=x, y=y, weight=w, ymax=max(y,na.rm=TRUE))) +
       geom_boxplot(...) +
       scale_y_continuous(trans=trans.y[[1]]) + xlab(xlab) + ylab(ylab) +
-      # for factors, write horizontal axis labels at an angle to avoid overlap
-      theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=1))
+      theme_slanted_text_x + theme_panel_fac_x + theme_panel_num_y
 }
 
 
@@ -898,7 +915,8 @@ gplt.density <- function(data, x, w='NULL',
       xlab(trans.x[[2]]) + ylab(ylab) +
       # density numbers themselves not very meaningful
       theme(axis.ticks.y=element_blank(),
-            axis.text.y=element_blank())
+            axis.text.y=element_blank()) +
+      theme_panel_num_x
 }
 
 # histogram plot with overlayed vertical median lines
@@ -933,7 +951,8 @@ gplt.histogram <- function(data, x, w='NULL',
       ylab <- w
    }
 
-   p + scale_x_continuous(trans=trans.x[[1]]) + xlab(trans.x[[2]]) + ylab(ylab)
+   p + scale_x_continuous(trans=trans.x[[1]]) + xlab(trans.x[[2]]) + ylab(ylab) +
+      theme_panel_num_x + theme_panel_num_y
 }
 
 
@@ -958,7 +977,8 @@ gplt.hex <- function(data, x, y, w='NULL', trans.log.thresh=2,
       scale_y_continuous(trans=trans.y[[1]]) +
       # log scaling of color often reveals more details
       scale_fill_gradientn(colours=rev(grDevices::rainbow(2)), trans='log') +
-      xlab(trans.x[[2]]) + ylab(trans.y[[2]])
+      xlab(trans.x[[2]]) + ylab(trans.y[[2]]) +
+      theme_panel_num_x + theme_panel_num_y
 }
 
 
@@ -1509,7 +1529,6 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
 
    vars.covered <- intersect(c(x, y), vars.non.null) # the variables reflected in the plot
    color.usable <- TRUE  # can we color the plot to reflect additional variables?
-   flip         <- FALSE # for num/factor scatter plots, we need to apply coord_flip(), see below
 
    if (grid.xy) {
       p <- gplt.heat(data, x, y, z, w, ...)
@@ -1615,9 +1634,8 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
                p <- p + theme(axis.ticks.y=element_blank(),
                               axis.text.y=element_blank())
             }
-
-            p <- p + coord_flip()
-
+            # the panel properties do not flip accordingly
+            p <- p + coord_flip() + theme_panel_num_x + theme_panel_fac_y
          }
       } else if ((!is.num[[x]]) && y == 'NULL') {
          type.plot <- 'bar'
@@ -1767,7 +1785,7 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       # example: plotluck(diamonds, price, cut,clarity)
       facet.labels.1 <- format.facets(data, vars.remaining[1])
       facet.labels.2 <- format.facets(data, vars.remaining[2])
-      p <- p + theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=1)) # axis text can easily overlap in small diagrams
+      p <- p + theme_slanted_text_x # axis text can easily overlap in small diagrams
       p <- p + facet_grid(
          sprintf('%s~%s', vars.remaining[1], vars.remaining[2]),
          labeller=labeller(.rows=as_labeller(facet.labels.1), .cols=as_labeller(facet.labels.2)))
@@ -1776,39 +1794,19 @@ plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
       ncol <- NULL
       nrow <- NULL
       switch <- NULL
+      facet.labels <- format.facets(data, vars.remaining[1])
       if (preferred.order == 'col') {
          facet.labels <- format.facets(data, vars.remaining[1], show.var='last')
          nrow <- opts$max.facets.row
          switch <- 'y'
       } else  if (preferred.order == 'row') {
-         facet.labels <- format.facets(data, vars.remaining[1])
-         p <- p + theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=1))  # axis text can easily overlap in small diagrams
+         p <- p + theme_slanted_text_x  # axis text can easily overlap in small diagrams
          ncol <- opts$max.facets.column
          switch <- 'x'
       }
       p <- p + facet_wrap(vars.remaining[1],
                           labeller=as_labeller(facet.labels),
                           nrow=nrow, ncol=ncol, switch = switch)
-   }
-
-   # note: coord_flip() changes the scales and labels along with the coordinates,
-   # but not the grid orientation and axis text properties
-
-   # points on the grid line are hard to see; remove grid line for factors
-   if (is.num[[x]]) {
-      p <- p + theme(panel.grid.major.x=element_line(color='black', linetype='dotted'),
-               panel.grid.minor.x=element_line(color='black',linetype='dotted'))
-   } else {
-      p <- p + theme(panel.grid.major.x=element_blank(),
-                     panel.grid.minor.x=element_blank())
-   }
-
-   if (is.num[[y]]) {
-      p <- p + theme(panel.grid.major.y=element_line(color='black', linetype='dotted'),
-               panel.grid.minor.y=element_line(color='black',linetype='dotted'))
-   } else {
-      p <- p + theme(panel.grid.major.y=element_blank(),
-                     panel.grid.minor.y=element_blank())
    }
 
    p + theme(panel.background=element_blank(), # get rid of gray background
