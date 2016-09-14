@@ -28,7 +28,7 @@ if (exists('.debug') && .debug) {
 
    eq_ref <- function(x) {
       print(x)
-      l <- readline(prompt="Hit <RETURN> to continue, anything else to quit: ")
+      #l <- readline(prompt="Hit <RETURN> to continue, anything else to quit: ")
       if (nchar(l) > 0) {
          stop('', call.=FALSE, domain=NA)
       }

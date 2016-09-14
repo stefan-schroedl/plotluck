@@ -2,9 +2,9 @@
 % Please edit documentation in R/plotluck.R
 \name{plotluck.options}
 \alias{plotluck.options}
-\title{Create options structure for \code{plotluck}}
+\title{Create OP options structure for \code{plotluck}}
 \usage{
-plotluck.options(...)
+plotluck.options(opts, ...)
 }
 \arguments{
 \item{...}{parameters to override default settings}
@@ -21,7 +21,7 @@ a named list of options, usable by function \code{plotluck}
  of \code{link{plotluck}}.
 }
 \description{
-Create options structure for \code{plotluck}
+Create OP options structure for \code{plotluck}
 }
 \note{
 \code{plotluck}'s aim is to provide a function that is usable

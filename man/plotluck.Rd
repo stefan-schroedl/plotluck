@@ -4,19 +4,18 @@
 \alias{plotluck}
 \title{"I'm feeling lucky" for ggplot}
 \usage{
-plotluck(data, x, y = NULL, z = NULL, w = NULL,
-  opts = plotluck.options(), ...)
+plotluck(formula, data, weights, opts = plotluck.options(), ...)
 }
 \arguments{
 \item{data}{a data frame}
 
-\item{x, y, z}{column names}
-
-\item{w}{weight column (optional)}
-
 \item{opts}{a named list of options (optional)}
 
 \item{...}{additional parameters to be passed to the respective geom_* objects}
+
+\item{x, y, z}{column names}
+
+\item{w}{weight column (optional)}
 }
 \value{
 a ggplot object
@@ -59,7 +58,7 @@ case of the hexbin plot, which encodes the number of points in a bin by the
 color; or as determined by the options \code{max.colors.scatter},
 \code{max.colors.density}, \code{max.colors.box}, or \code{max.colors.bar}),
 facetting is used, in a direction (i.e., horizontally or vertically subject
-to \code{max.facets.row} and \code{max.facets.column})  that facilitates
+to \code{facet.max.rows} and \code{facet.max.cols})  that facilitates
 comparing the particular type of plot. To this end, a numerical \code{z}
 variable is discretized into \code{discretize.intervals.z} many intervals of
 equal count or weight.
@@ -105,11 +104,11 @@ bar plots.
 
  There is some redundancy with regard to \emph{repeated points}, since they
  are conceptually identical to unique points with an associated frequency
- weight. By default, the option \code{convert.duplicates.to.weights} is
+ weight. By default, the option \code{scatter.dedupe} is
  switched on, which does exactly this. If it is \code{FALSE}, horizontal and
  vertical jittering will be applied if the number of duplicated points
  exceeds \code{min.points.jitter}. The amount of jittering can be controlled
- with \code{width.jitter}, \code{height.jitter}, and \code{factor.jitter}.
+ with \code{jitter.x} and \code{jitter.y}.
 }
 
 \section{Axis scaling}{
@@ -138,7 +137,7 @@ bar plots.
 \section{Sampling}{
  For very large data sets, plots can take a very long time
  (or even crash R). \code{plotluck} has a built-in stop-gap: If the data
- comprises more than \code{max.sample.rows}, it will be sampled down to that
+ comprises more than \code{sample.max.rows}, it will be sampled down to that
  size (taking weights into account, if supplied).
 }
 
@@ -167,7 +166,7 @@ bar plots.
  choice of the number of bins of a histogram can create misleading artifacts.
 
  If the resulting graph would contain too many (more than
- \code{max.levels.violin}) violin plots in a row, the algorithm switches to
+ \code{max.factor.levels.violin}) violin plots in a row, the algorithm switches to
  box plots. The defaults can also be directly overriden by changing options
  \code{use.geom.violin} and \code{use.geom.density}. The number of bins of a
  histogram can be customized with \code{n.breaks.histogram}. The default

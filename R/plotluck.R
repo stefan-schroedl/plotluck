@@ -2,94 +2,10 @@
 #'@importFrom plyr ddply summarise .
 #'@importFrom stats as.formula median quantile runif xtabs
 
+
 safe_log <- function(x,...) {
    ifelse(x<=0,0,log(x,...))
 }
-
-group.center <- function(data, x, group.vars, w='NULL', method='median') {
-
-   if (method == 'median') {
-      fun <- median
-   } else if (method == 'mean') {
-      fun <- mean
-   } else {
-      stop(sprintf('group.center unknown function: %s', fun))
-   }
-
-   if (w == 'NULL') {
-      grp.center <- ddply(data, group.vars, function(d) fun(d[[x]], na.rm=TRUE))
-   } else {
-      if (method == 'median') {
-         # workaround for problems in wtd.quantile:
-         # - if all values are NA, wtd.mean throws error: 'zero non-NA points'
-         # - if weights are integer, sum can lead to NA due to overflow (conversion to double in plotluck)
-         f <- function(d) if (all(is.na(d[[x]]))) { NA } else { Hmisc::wtd.quantile(d[[x]], weights=d[[w]], probs=0.5, na.rm=TRUE, normwt=TRUE) }
-         grp.center <- ddply(data, group.vars, f)
-      } else {
-         grp.center <- ddply(data, group.vars, function(d) Hmisc::wtd.mean(d[[x]], d[[w]], na.rm=TRUE))
-      }
-   }
-   names(grp.center)[length(grp.center)] <- '.center.'
-   grp.center
-}
-
-# calculate axis scale transform based on value distribution
-# either:
-# - identity
-# - log-10
-# - log-10-modulus: sign(x) * log(1+|x|)
-# John & Draper 1980; see http://blogs.sas.com/content/iml/2014/07/14/log-transformation-of-pos-neg/
-
-get.trans.fun <- function(data, x, expansion.thresh=2, label) {
-
-   if (is.null(label)) {
-      label <- x
-   }
-   if (!is.numeric(data[[x]]) ||
-          length(unique(data[[x]])) <= 2) {
-      return(list(scales::identity_trans(), label))
-   }
-
-   q <- quantile(data[[x]], c(0, 0.25, 0.5, 0.75, 1), na.rm=TRUE)
-
-   # heuristic:
-   # - compute the ratio of the plotting range occupied by the
-   #   'core' part of the distribution between the lower and upper
-   #   quartile
-   # - if range is positive only, candidate transform is log
-   # - if range includes negative values, candidate transform is log-modulus
-   # - compute this ratio for the case that transform is applied
-   # - decide for transform is this ratio is greater than expansion.thresh
-
-   range.core     <- c(q[4], q[2])
-   range.complete <- c(q[5], q[1])
-   ratio.before   <- diff(range.core) / diff(range.complete)
-
-   sgn <- ifelse(q[5] <= 0,
-                 -1,
-                 ifelse(q[1] > 0,
-                        1,
-                        0))
-
-   # offset == 1 is interpreted as using log-modulus, instead of log
-   if (sgn == 1) {
-      offset <- 0
-   } else {
-      offset <- 1
-   }
-
-   fun.trans <- log_mod_trans(base=10, offset=offset)
-
-   range.core.after     <- fun.trans$trans(range.core)
-   range.complete.after <- fun.trans$trans(range.complete)
-   ratio.after          <- diff(range.core.after) / diff(range.complete.after)
-   if (ratio.after > expansion.thresh * ratio.before) {
-      list(fun.trans,  sprintf('%s (log scale)', label))
-   } else {
-      list(scales::identity_trans(), label)
-   }
-}
-
 
 # calculate the floor or ceiling of the exponent of a number
 # note: for log-modulus (offset=1), sign of returned value signifies sign of
@@ -197,133 +113,342 @@ log_mod_trans <- function(base = exp(1), offset=0)
              domain=domain)
 }
 
-# return a column of the levels of a factor where the margin value is replaced
-# by <var> = <val>
-format.facets <- function(data, x, show.var='first') {
-   lev <- as.character(levels(data[[x]]))
-   names(lev) <- lev
-   idx <- 1
-   if (show.var == 'last') {
-      idx <- length(lev)
+
+# calculate axis scale transform based on value distribution
+# either:
+# - identity
+# - log-10
+# - log-10-modulus: sign(x) * log(1+|x|)
+# John & Draper 1980; see http://blogs.sas.com/content/iml/2014/07/14/log-transformation-of-pos-neg/
+
+get.trans.fun <- function(data, x, expansion.thresh=2, label=x) {
+
+   if (!is.numeric(data[[x]]) ||
+       length(unique(data[[x]])) <= 2) {
+      return(list(scales::identity_trans(), label))
    }
-   lev[idx] <- sprintf('%s = %s', x, lev[idx])
-   lev
+
+   q <- quantile(data[[x]], c(0, 0.25, 0.5, 0.75, 1), na.rm=TRUE)
+
+   # heuristic:
+   # - compute the ratio of the plotting range occupied by the
+   #   'core' part of the distribution between the lower and upper
+   #   quartile
+   # - if range is positive only, candidate transform is log
+   # - if range includes negative values, candidate transform is log-modulus
+   # - compute this ratio for the case that transform is applied
+   # - decide for transform is this ratio is greater than expansion.thresh
+
+   range.core     <- c(q[4], q[2])
+   range.complete <- c(q[5], q[1])
+   ratio.before   <- diff(range.core) / diff(range.complete)
+
+   sgn <- ifelse(q[5] <= 0,
+                 -1,
+                 ifelse(q[1] > 0,
+                        1,
+                        0))
+
+   # offset == 1 is interpreted as using log-modulus, instead of log
+   if (sgn == 1) {
+      offset <- 0
+   } else {
+      offset <- 1
+   }
+
+   fun.trans <- log_mod_trans(base=10, offset=offset)
+
+   range.core.after     <- fun.trans$trans(range.core)
+   range.complete.after <- fun.trans$trans(range.complete)
+   ratio.after          <- diff(range.core.after) / diff(range.complete.after)
+   if (ratio.after > expansion.thresh * ratio.before) {
+      list(fun.trans,  sprintf('%s (log scale)', label))
+   } else {
+      list(scales::identity_trans(), label)
+   }
 }
 
-# return levels of (unordered) factor, sorted by (weighted) frequency
-order.factor.freq <- function(data, x, w='NULL', decreasing=TRUE,
-                              if.ordered=FALSE, exclude.factor=NA) {
+
+Mode <- function(x) {
+   ux <- unique(x)
+   # if not returning a data frame, ddply will create an integer result column
+   data.frame(ux[which.max(tabulate(match(x, ux)))])
+}
+
+weighted.mode <- function(data, x, w) {
+   wtd <- plyr::ddply(data, x, function(d) sum(d[[w]], na.rm=TRUE))
+   idx <- which.max(wtd[[2]])
+   # need to rename to make later merge possible
+   names(wtd)[1] <- '.wtd.mode.'
+   wtd[idx, 1, drop=FALSE]
+}
+
+# calculate measure of central tendency per group.
+# for numeric data[[x]], apply (weighted or unweighted) method as specified.
+# for ordered factors, compute the (weighted or unweighted) mean or median over
+#    the sorted integer levels, then round at the end.
+# for unordered factors, always compute the mode (most frequent value)
+
+group.central <- function(data, x, group.vars, w='NULL', method=c('median', 'mean'), col.name='.center.') {
+
+   method <- match.arg(method)
+
+   is.num <- is.numeric(data[[x]])
+   is.ord <- (!is.num) && is.ordered(data[[x]])
+
+   lev <- NULL
+   grp.center <- NULL
+
+   if (is.ord) {
+      # treat ordinals as integer
+      lev <- levels(data[[x]])
+      data[[x]] <- as.integer(data[[x]])
+   }
+
+   if (w == 'NULL') {
+      if (is.num || is.ord) {
+         fun <- ifelse(method=='median', median, mean)
+         grp.center <- plyr::ddply(data, group.vars, function(d) fun(d[[x]], na.rm=TRUE))
+      } else {
+         grp.center <- plyr::ddply(data, group.vars, function(d) Mode(d[[x]]))
+      }
+   } else {
+      if (is.num || is.ord) {
+         if (method == 'median') {
+            # workaround for problems in wtd.quantile:
+            # - if all values are NA, wtd.mean throws error: 'zero non-NA points'
+            # - if weights are integer, sum can lead to NA due to overflow
+            f <- function(d) if (all(is.na(d[[x]]))) { NA } else { Hmisc::wtd.quantile(d[[x]],
+                                                                                       weights=as.numeric(d[[w]]), probs=0.5,
+                                                                                       type='i/(n+1)', na.rm=TRUE, normwt=TRUE) }
+            grp.center <- plyr::ddply(data, group.vars, f)
+         } else {
+            grp.center <- plyr::ddply(data, group.vars, function(d) Hmisc::wtd.mean(d[[x]], d[[w]], na.rm=TRUE))
+         }
+      } else { # !(is.num || is.ord)
+         grp.center <- plyr::ddply(data, group.vars, function(d) weighted.mode(d, x, w))
+      }
+   }
+
+   # for ordinals, reattach levels
+   if (is.ord) {
+      grp.center[[length(grp.center)]] <- ordered(lev[round(grp.center[[length(grp.center)]])], exclude=NULL)
+   }
+
+   names(grp.center)[length(grp.center)] <- col.name
+   grp.center
+}
+
+# make all values of data[[x]] identically equal to the group mean
+replace.by.central <- function(data, x, g, w) {
+   x.avg <- group.central(data, x, g, w, 'mean', '.replace.center.')
+   data <- merge(data, x.avg)
+   data[[x]] <- data[[length(data)]]
+   data[[length(data)]] <- NULL
+   data
+}
+
+# return data frame with the levels of unordered factor x resorted by (weighted) frequency
+order.factor.by.freq <- function(data, x, w='NULL', decreasing=FALSE) {
    x.data <- data[[x]]
-   if ((!(is.factor(x.data) ||
-             is.character(x.data))) ||
-          # do not reorder ordered factors, unless explicitly overriden with 'if.ordered'
-          ((!if.ordered) && is.ordered(x.data))) {
-      # no change
-      return(levels(x.data))
+   if (is.numeric(x.data) || is.ordered(x.data)) {
+       # do not change ordered factors
+      return(data)
    }
 
    if (w=='NULL') {
-      tab <- table(x.data, exclude=exclude.factor)
+      tab <- table(x.data, useNA='ifany')
    } else {
-      tab <- xtabs(as.formula(sprintf('%s ~ %s', w, x)), data, exclude=exclude.factor)
+      tab <- xtabs(as.formula(sprintf('%s ~ %s', w, x)), data, exclude=NULL, na.action=na.pass)
    }
    ord <- order(tab, decreasing=decreasing)
-   levels(x.data)[ord]
+   data[[x]] <- factor(x.data, levels=levels(x.data)[ord],
+                       exclude=NULL)
+   return(data)
 }
 
 
-# return levels of (unordered) factor x, sorted by (weighted) mean of dependent variable y
-order.factor.value <- function(data, x, y, w='NULL', decreasing=TRUE, exclude.factor=NA) {
-
-   if (y == 'NULL' || y == x) {
-      return(order.factor.freq(data,x, w, decreasing, exclude.factor=exclude.factor))
-   }
+# return data frame with the levels of unordered factor x resorted by (weighted) central tendency of dependent variable y
+order.factor.by.value <- function(data, x, y, w='NULL', decreasing=FALSE) {
 
    x.data <- data[[x]]
-   y.data <- data[[y]]
-   if ((!(is.factor(x.data) || is.character(x.data)))
-       || is.ordered(x.data)) {
-      return(levels(x.data))
+   if (is.numeric(x.data) || is.ordered(x.data)) {
+      # do not change ordered factors
+      return(data)
    }
 
-   if (!(is.numeric(y.data) || is.logical(y.data))) {
-      if (!is.ordered(y.data) || is.logical(y.data)) {
-         return(levels(x.data))
-      } else {
-         # for an ordered factor, consider integer levels
-         data[[y]] <- as.numeric(data[[y]])
+   if (is.null(y) || y == 'NULL' || y == x) {
+      return(order.factor.by.freq(data, x, w, decreasing))
+   }
+
+   y.data <- data[[y]]
+
+   # we are displaying median lines for distributions, so the sorting should agree with this
+   centers <- group.central(data, y, x, w, method='median')
+
+   # if medians are equal for two or more classes, resolve ties by using the mean
+   if (length(unique(centers$.center.)) != nrow(centers)) {
+      centers <- group.central(data, y, x, w, method='mean')
+   }
+   if (!is.numeric(centers$.center.)) {
+      centers$.center. <- as.integer(centers$.center.)
+   }
+   ord <- order(centers$.center., decreasing=decreasing)
+
+   data[[x]] <- factor(x.data,
+                       levels= centers[ord, x],
+                       exclude=NULL)
+   data
+}
+
+# reorder unordered factor levels of x,y,z to highlight dependencies
+
+order.factors <- function(data, x, y, z='NULL', w='NULL') {
+
+   # if at least one factor is ordered, sort the other factors accordingly
+   # if none is ordered, sort according to z (if it exists), otherwise y
+
+   if (z == 'NULL') {
+      v.all <- c(y,x)
+   } else {
+      v.all <- c(z,y,x)
+   }
+   v.sort <- NULL
+   for (v in v.all) {
+      if (is.numeric(data[[v]]) || is.ordered(data[[v]])) {
+         v.sort <- v
+         break
       }
    }
-
-   means <- group.center(data, y, x, w)
-
-   # if medians are equal for two or more classes, order by mean
-   if (length(unique(means$.center.)) != nrow(means)) {
-      means <- group.center(data, y, x, w, method='mean')
+   if (is.null(v.sort)) {
+      v.sort <- v.all[1]
+      data <- order.factor.by.freq(data, v.sort, w)
    }
-   ord <- order(means$.center., decreasing=decreasing)
-   means[ord, x]
+
+   for (v in setdiff(v.all, v.sort)) {
+      if ((!is.numeric(data[[v]])) && (!is.ordered(data[[v]]))) {
+         # v is sortable
+         data <- order.factor.by.value(data, v, v.sort, w)
+      }
+   }
+   data
 }
 
-
-# return a possibly refactored vector:
-# - convert character vectors into factors
-# - if there are more than max.factor.levels levels, retain only the most frequent ones,
-#   merge the remaining ones into '.other.'
-# - convert a numeric variable with less than few.unique.as.factor distinct values
-#   into a factor, if length would have allowed for more distinct values
-# - exclude-factor - flag to apply in factor(...) calls, to preserve NA values
-#   if required
-preprocess.factors <- function(data, x, w='NULL',
-                              max.factor.levels=100,
-                              few.unique.as.factor=10,
-                              exclude.factor=NA) {
+# limit the number of levels of a factor so as to not overcrowd the display
+# - for unordered factors, keep the highest ones, group lower levels into '.other.'
+# - for ordered factors, form about equidistant subgroups, in order
+# - If there a slightly more levels than desired (according to tol), still don't
+#   keep it, as quantizing makes the factor less intelligible
+# - by.frequency keep the most frequent levels (according to count or weight)
+#
+limit.factor.levels <- function(data, x, w='NULL',
+                                 max.levels=30,
+                                 tol=max.levels*1.5,
+                                 by.frequency=TRUE,
+                                 reverse=FALSE) {
    x.data <- data[[x]]
-   non.na <- !is.na(x.data)
-   u <- length(unique(x.data[non.na]))
-   if (u == 1) {
-      # note: case of all NA already caught in function plotluck
-      stop(sprintf('Variable %s has only single level ("%s"), giving up', x, unique(x.data[non.na])))
-   }
 
    if (is.numeric(x.data)) {
-      if (u <= few.unique.as.factor &&
-             nrow(data) > u * u) { # heuristic similar to histogram binning
-         return(ordered(x.data, exclude=exclude.factor))
-      } else {
-         return(x.data)
+      return(data)
+   }
+
+   u <- length(levels(x.data))
+
+   if (u <= tol) {
+      return(data)
+   }
+   warning(sprintf('Factor variable %s has too many levels (%d), truncating to %d', x, u, max.levels))
+
+   if (!is.ordered(x.data)) {
+      ord <- seq(length(levels(x.data)))
+      if(by.frequency) {
+         # keep the most frequent levels in the same order, combine the rest into '.other.',
+         data.tmp <- data
+         data.tmp[[x]] <- as.integer(data.tmp[[x]])
+         tab <- NULL
+         if (w=='NULL') {
+            tab <- table(data.tmp[[x]], useNA='ifany')
+         } else {
+            tab <- xtabs(as.formula(sprintf('%s ~ %s', w, x)), data.tmp,  exclude=NULL, na.action=na.pass)
+         }
+         # make sure that ties are broken according to previous order!
+         ord <- order(tab, as.numeric(names(tab)), decreasing=FALSE)
       }
-   }
-
-   if (!is.factor(x.data)) {
-      # i.e., character or logical
-      x.data <- factor(x.data, exclude=exclude.factor)
-   }
-
-   if (u > max.factor.levels) {
-      warning(sprintf('Factor variable %s has too many levels (%d), truncating to %d', x, u, max.factor.levels))
-      tab <- table(x.data)
-      data[[x]] <- x.data
-      levels.ord <- order.factor.freq(data, x, w, if.ordered=TRUE, exclude.factor=exclude.factor)
-      levels.reduced <- levels.ord[1:max.factor.levels]
+      levels.ord <- levels(x.data)[ord]
+      if (!reverse) {
+         levels.reduced <- levels.ord[seq(u-max.levels+1,u)]
+      } else {
+         levels.reduced <- levels.ord[seq(max.levels)]
+      }
+      # note: we want to maintain the original order of levels!
       idx.trunc <- !(x.data %in% levels.reduced)
-      levels(x.data) <- c(levels(x.data), '.other.')
+      x.data <- factor(x.data, levels=c('.other.', levels(x.data)),exclude=NULL)
       x.data[idx.trunc] <- '.other.'
-      x.data <- factor(x.data, levels=c(levels.reduced, '.other.'), exclude=exclude.factor)
-   } else if (u == 2) {
-      # binary variables are trivially ordered
-      x.data <- ordered(x.data)
-   }
+      data[[x]] <- factor(x.data, exclude=NULL)
 
-   # suppress unused levels
-   # for NA treatment, see http://r.789695.n4.nabble.com/droplevels-inappropriate-change-td4723942.html
-   # droplevels(x.data, exclude=exclude.factor) does not seem to be working correctly
-   x.data[,drop=T]
+   } else {  # is.ordered(data[[x]])
+
+     #  Note: The weighted case is very hard to get right for very unequal weights.
+     #  Ignoring for now.
+
+      breaks <- 1 + (seq(0,max.levels)/max.levels) * (length(levels(x.data))-1)
+
+      # dig.lab: in cut(), avoids scientific formatting for integers
+      dig.lab=50
+      x.data <- cut(as.integer(x.data), breaks=breaks,
+                    right=FALSE, include.lowest=TRUE, ordered.result=TRUE, dig.lab=dig.lab)
+
+      # recreate level information by parsing those generated by 'cut'
+      # make lists of elements, e.g.:
+      #  - original levels 'a', 'b', 'c', 'd'
+      #  - binned level '[2,4)' ->  'c,d'
+      x.data <- as.factor(x.data)
+
+      reconstruct.levels <- function(interval, levels) {
+         left.bracket <- substr(interval,1,1)
+         right.bracket <- substr(interval,nchar(interval),nchar(interval))
+         eps <- 0
+         if (left.bracket == '(') {
+            eps <- 1e-10
+         }
+         if (right.bracket == ')') {
+            eps <- -1e-10
+         }
+         left.idx  <- ceiling(eps + as.numeric(gsub('[(\\[]([0-9.]+),.*', '\\1', interval)))
+         right.idx <- floor(eps + as.numeric(gsub('.*,([0-9.]+).', '\\1', interval)))
+
+         # catch if level doesn't fit interval pattern - this shouldn't happen!
+         if (is.na(left.idx) || is.na(right.idx)) {
+            return(interval);
+         }
+         return(paste(levels[left.idx:right.idx], sep='', collapse=','))
+      }
+
+      levels(x.data) <- sapply(levels(x.data), reconstruct.levels, levels=levels(data[[x]]))
+      x.data <- x.data[,drop=T]
+      data[[x]] <- x.data
+   }
+   data
+}
+
+# if one numerical axis has very few values, it sometimes makes sense to treat them as a factor
+discretize.few.unique <- function(data, x, few.unique.as.factor=5) {
+   if (!is.numeric(data[[x]])) {
+      return(data)
+   }
+   non.na <- !is.na(data[[x]])
+   u <- length(unique(data[non.na,x]))
+
+   if (u <= few.unique.as.factor &&
+       nrow(data) > u * u) { # heuristic similar to histogram binning
+      data[[x]] <- ordered(data[[x]], exclude=NULL)
+   }
+   data
 }
 
 
 # determine number of histogram bins
-# note: this is a modification the nclass.FD function, which sometimes returns '1'
+# note: this is a modification the 'nclass.FD' function, which sometimes returns '1'
 # for very uneven distributions.
 
 nclass.FD.modified <- function(x, max.bins=200) {
@@ -352,44 +477,43 @@ nclass.FD.modified <- function(x, max.bins=200) {
    num.bins
 }
 
-# break a variable into intervals
+
+# break a numeric variable into intervals
 # - method=quantile - bins with equal number of samples
 # - method=histogram - equidistant intervals
 # - max.breaks - requested number of breaks
-# - keep.breaks - if there are less than that many distinct values to
+# - tol - if there are less than that many distinct values to
 #     begin with, don't do additional binning
-#
-# for factor variables with more than keep.breaks many levels:
-# - if y is not 'NULL', order levels by mean y, else by frequency
-#   (y is not used for numeric variables)
-# - bin the corresponding integer vector of level IDs
-# - the transformed level names are lists of levels
-quantize <- function(data, x,
-                     y='NULL',
-                     w='NULL',
-                     max.breaks=5,
-                     keep.breaks=10,
-                     method=c('quantile', 'histogram'),
-                     exclude.factor=NA) {
+# - estimate.breaks=FALSE - use exactly max.breaks many breaks
+
+discretize <- function(data, x,
+                       w='NULL',
+                       max.breaks,
+                       tol=max.breaks*1.5,
+                       estimate.breaks=TRUE,
+                       method=c('quantile', 'histogram')) {
    x.data <- data[[x]]
-   u <- unique(x.data)
-   if (length(u) <= keep.breaks) {
-      return(ordered(x.data))
+
+   if (!is.numeric(x.data)) {
+      return(data)
+   }
+
+   u <- length(unique(x.data))
+
+   if (missing(max.breaks)) {
+      max.breaks = ceiling(min(u-1, sqrt(nrow(data))))
+   }
+   max.breaks = floor(min(max.breaks, u-1, sqrt(nrow(data))))
+   max.breaks <- min(max.breaks, nrow(data))
+
+
+   if (u - 1 <= max(tol, max.breaks)) {
+      return(data)
    }
 
    method <- match.arg(method)
 
-   max.breaks <- min(max.breaks, nrow(data))
-
-   if (!is.numeric(data[[x]])) {
-      # order levels
-      data[[x]] <- as.factor(x.data)
-      x.levels <- order.factor.value(data, x, y, w, decreasing=TRUE, exclude.factor=exclude.factor)
-      x.data <- factor(x.data, levels=x.levels, exclude=exclude.factor)
-      # treat as integers for binning
-      x.data <- as.integer(x.data)
-   }
-
+   breaks <- NULL
    # compute number of breaks
    if (method == 'quantile') {
       probs <- seq(0, max.breaks) / max.breaks
@@ -397,56 +521,106 @@ quantize <- function(data, x,
          breaks <- quantile(x.data, probs=probs, na.rm=TRUE)
       } else {
          breaks <- Hmisc::wtd.quantile(x.data, weights=data[[w]],
-                                probs=probs, na.rm=TRUE, normwt=TRUE)
+                                       probs=probs, na.rm=TRUE, normwt=TRUE,
+                                       type='i/(n+1)')
       }
-   } else {
-      n.breaks <- nclass.FD.modified(x.data, max.breaks)
+      data[[x]] <- ordered(cut(x.data, breaks=unique(breaks), include.lowest=TRUE),
+                           exclude=NULL)
+
+   } else { # method == 'histogram'
+      n.breaks <- max.breaks
+      if (estimate.breaks) {
+         n.breaks <- nclass.FD.modified(x.data, max.breaks)
+      }
       breaks <- graphics::hist(x.data, breaks=n.breaks, plot=FALSE)$breaks
+      # leave type numeric
+      step<-breaks[2] - breaks[1]
+      data[[x]] <- round((x.data-breaks[1])/step)*step+breaks[1]
    }
 
-   if (!is.numeric(data[[x]])) {
-      breaks <- as.integer(round(breaks))
-      # dig.lab: in cut(), avoids scientific formatting for integers
-      dig.lab=50
-   } else {
-      dig.lab = 3L # same as usual default in cut()
-   }
+   data
+}
 
-   # break into intervals
-   x.data <- ordered(cut(x.data, breaks=unique(breaks), include.lowest=TRUE, dig.lab=dig.lab))
+# - convert character vectors into factors
+# - with na.rm=TRUE, remove rows containing NA
+# - from here on, don't exclude any levels from factors any more
+# - check for all-NA and constant values
+# - convert character vectors into factors
+# - convert logicals into ordered factors
 
-   # recreate level information for factors
-   if (!is.numeric(data[[x]])) {
-      # make lists of elements, e.g.:
-      #  - original levels 'a', 'b', 'c', 'd'
-      #  - binned level '(2,4]' ->  'c,d'
-      x.data <- as.factor(x.data)
-      reconstruct.levels <- function(interval, levels) {
-         left.bracket <- substr(interval,1,1)
-         left.idx  <- as.integer(gsub('[(\\[]([0-9]+),.*', '\\1', interval))
-         right.idx <- as.integer(gsub('.*,([0-9]+)\\]', '\\1', interval))
-         if (left.bracket == '(') {
-            left.idx <- left.idx + 1
-         }
-         # catch if level doesn't fit interval pattern
-         if (is.na(left.idx) || is.na(right.idx)) {
-            return(interval);
-         }
-         return(paste(levels[left.idx:right.idx], sep='', collapse=','))
+preprocess.factors <- function(data, na.rm) {
+
+   for (x in names(data)) {
+
+      x.data <- data[[x]]
+      non.na <- !is.na(x.data)
+      if (length(which(non.na)) == 0) {
+         stop(sprintf('Variable %s has only missing values, giving up', x))
       }
 
-      levels(x.data) <- sapply(levels(x.data), reconstruct.levels, levels=x.levels)
-      x.data <- droplevels(x.data)
+      u <- length(unique(x.data[non.na]))
+      if (u == 1) {
+         stop(sprintf('Variable %s has only single level ("%s"), giving up', x, unique(x.data[non.na])))
+      }
+
+      if (u == 2) {
+         # binary variables are trivially ordered
+         data[[x]] <- ordered(x.data)
+      } else if (!is.numeric(x.data)) {
+
+         if (!is.factor(x.data)) {
+            # i.e., character or logical
+            x.data <- factor(x.data, exclude=NULL)
+         }
+
+         # suppress unused levels
+         # for NA treatment, see http://r.789695.n4.nabble.com/droplevels-inappropriate-change-td4723942.html
+         # droplevels(x.data, exclude=exclude.factor) does not seem to be working correctly
+         data[[x]] <- x.data[,drop=TRUE]
+      }
    }
 
-   x.data
+  if (na.rm) {
+    factor.with.na.level <- any(sapply(seq(length(data)),
+                                       function(x) {is.factor(data[[x]]) && any(is.na(levels(data[[x]])))}))
+    if (factor.with.na.level) {
+      warning('Option "na.rm=TRUE", but data contains factor(s) with an NA level. Keeping these ...')
+    }
+    data <- na.omit(data)
+
+    if (nrow(data) == 0) {
+      stop(sprintf('Variable(s) have only missing values, giving up'))
+    }
+
+  }
+
+  # if na.rm==TRUE, all NA's have been removed. In either case, from now on all levels should be
+  # included
+
+  for (i in seq(length(data))) {
+    if (is.factor(data[[i]])) {
+      data[[i]] <- factor(data[[i]], exclude=NULL, ordered=is.ordered(data[[i]]))
+      # note: rename <NA> - else ggplot doesn't show a color legend
+      idx<-which(is.na(levels(data[[i]])))
+      if (length(idx) > 0) {
+        levels(data[[i]])[idx] <- '?'
+      }
+    }
+  }
+
+   data
 }
 
 
+marginalize <- function(data, var.list, w='NULL') {
+   rhs <- paste(var.list, sep='', collapse='+')
+   prop.table(xtabs(as.formula(sprintf('%s ~ %s', ifelse(w=='NULL', c(''), w), rhs)), data, exclude=NULL, na.action=na.pass))
+}
+
 # entropy: H(vars) = - \sum p(vars)log2(p(vars))
 # assumption: vars are factors
-entropy <- function(data, vars, w, exclude.factor=NA) {
-   tab  <- marginalize(data, vars, w, exclude.factor=exclude.factor)
+entropy <- function(data, vars, w) {
+   tab  <- marginalize(data, vars, w)
    log.tab <- log2(tab)
    log.tab[tab==0] <- 0 # guard for -Inf
    -sum(tab * log.tab)
@@ -455,20 +629,75 @@ entropy <- function(data, vars, w, exclude.factor=NA) {
 
 # conditional entropy: H(y|x) = H(x,y) - H(x)
 # assumption: x, y are factors
-cond.entropy <- function(data, x, y, w, exclude.factor=NA) {
+cond.entropy <- function(data, x, y, w) {
    if (x == y) {
       0
    } else {
-      hxy <- entropy(data, c(x, y), w, exclude.factor)
-      hx <- entropy(data, x, w, exclude.factor)
+      hxy <- entropy(data, c(x, y), w)
+      hx <- entropy(data, x, w)
       hxy - hx
    }
 }
 
+quantize <- function(data, v, target='NULL', w, n.levels, estimate.breaks=FALSE, method='histogram') {
+  if (is.numeric(data[[v]])) {
+    data <- discretize(data, v, w=w,
+                       max.breaks=n.levels, tol=n.levels, estimate.breaks, method=method)
+  } else {
+    if (target != 'NULL') {
+      data <- order.factor.by.value(data, v, target, w=w)
+    }
+    data <- limit.factor.levels(data, v, w,
+                                max.levels=n.levels,
+                                tol=n.levels)
+  }
+  data
+}
 
-marginalize <- function(data, var.list, w='NULL', exclude.factor=NA) {
-   rhs <- paste(var.list, sep='', collapse='+')
-   prop.table(xtabs(as.formula(sprintf('%s ~ %s', ifelse(w=='NULL', c(''), w), rhs)), data, exclude=exclude.factor))
+
+# return a list of conditional entropies H(target|x), for each column in the data frame.
+# for comparability, all variables are quantized into the same number of bins
+cond.entropy.data <- function(data, target, given, w='NULL') {
+   n.row <- nrow(data)
+   n.levels <- floor(max(2, min(log2(n.row), n.row/10))) # heuristic
+
+   cond.entropy.quantized <- function(data, x, y, w, n.levels) {
+      if (x == y) {
+         0
+      } else {
+         x.data <- quantize(data, x, y, w, n.levels)
+         # note: we need to make a copy for the special case of x=w
+         names(x.data)[names(x.data)==x]<-'.x'
+         if (w != 'NULL') {
+            x.data[[w]] <- data[[w]]
+         }
+         cond.entropy(x.data, '.x', y, w)
+      }
+   }
+
+   entropies <- matrix(nrow=length(data), ncol=length(data))
+   colnames(entropies) <- names(data)
+   rownames(entropies) <-names(data)
+
+   if (!missing(target)) {
+      # single row/column
+      data <- quantize(data, target, w=w, n.levels=n.levels)
+      entropies[target,] <- sapply(names(data), function(x)
+         cond.entropy.quantized(data, x, target, w, n.levels))
+   } else {
+      for (target in names(data)) {
+         data <- quantize(data, target, w=w, n.levels=n.levels)
+         if (!missing(given)) {
+            entropies[target, given] <- cond.entropy.quantized(data, x=given, y=target, w, n.levels)
+         } else {
+            # all vs all
+            entropies[target,] <- sapply(names(data), function(x)
+               cond.entropy.quantized(data, x, target, w, n.levels))
+         }
+
+      }
+   }
+   entropies
 }
 
 
@@ -509,200 +738,723 @@ theme_panel_fac_y <- theme(panel.grid.major.y=element_blank(),
 # for factors, write horizontal axis labels at an angle to avoid overlap
 theme_slanted_text_x <- theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=1))
 
+# detect if x axis text might overlap
+estimate.label.overlap <- function(labels, breaks=seq(length(labels))) {
+   if (length(breaks) < 2) {
+      return(FALSE)
+   }
+   rg <- breaks[length(breaks)] - breaks[1]
+   for (i in seq(length(breaks)-1)) {
+      space <- (breaks[i+1] - breaks[i]) / rg
+      label.width <- as.numeric(grid::convertX(unit(1, 'strwidth', labels[i]),'npc'))
+      if (label.width > space) {
+         return(TRUE)
+      }
+   }
+   return(FALSE)
+}
+
+# add color and/or fill scale layers to plot
+# - use qualitative (sequential) brewer scale for (un)ordered factors, if
+#   palette size supports it.
+#   Otherwise, create a colorRampPalette for ordered factors, or use the default if unordered.
+# - use a gradient fill for numeric vectors
+# - if too few colors, use default (first two colors of brewer palette might not look good by themselves!)
+
+add.color.fill <- function(p, data, x, aesth=c('color', 'fill'),
+                           colors.gradient=c(hcl(66,60,85), hcl(128,100,35)),
+                           palette.brewer.seq='YlGn',
+                           palette.brewer.qual='Set1') {
+
+   na.value <- 'darkgray'
+   if ('color' %in% aesth) {
+     p <- p + aes_string(color=x)
+   }
+   if ('fill' %in% aesth) {
+     p <- p + aes_string(fill=x)
+   }
+   if (length(unique(data[[x]])) <= 2) {
+      # just use default
+   } else if (is.numeric(data[[x]])) {
+      if ('color' %in% aesth) {
+         p <- p + scale_color_gradientn(colors=colors.gradient)
+      }
+      if ('fill' %in% aesth) {
+         p <- p + scale_fill_gradientn(colors=colors.gradient)
+      }
+   } else if (is.ordered(data[[x]])) {
+      if (length(levels(data[[x]])) <= 8) {
+         if ('color' %in% aesth) {
+            p <- p + scale_color_brewer(palette=palette.brewer.seq, na.value=na.value)
+         }
+         if ('fill' %in% aesth) {
+            p <- p + scale_fill_brewer(palette=palette.brewer.seq, na.value=na.value)
+         }
+      } else { # length(levels(data[[x]])) > 8
+         pal <- colorRampPalette(colors.gradient)(length(levels(data[[x]])))
+         names(pal) <- levels(data[[x]])
+         if ('color' %in% aesth) {
+            p <- p + scale_color_manual(values=pal, na.value=na.value)
+         }
+         if ('fill' %in% aesth) {
+            p <- p + scale_fill_manual(values=pal, na.value=na.value)
+         }
+      }
+   } else { # unordered factor
+      if (length(levels(data[[x]])) <= 9) {
+         if ('color' %in% aesth) {
+            p <- p + scale_color_brewer(palette=palette.brewer.qual, na.value=na.value)
+         }
+         if ('fill' %in% aesth) {
+            p <- p + scale_fill_brewer(palette=palette.brewer.qual, na.value=na.value)
+         }
+      } else { # length(levels(data[[x]])) > 9
+         # use default
+         if ('color' %in% aesth) {
+            p <- p + scale_color_hue()
+         }
+         if ('fill' %in% aesth) {
+            p <- p + scale_fill_hue()
+         }
+      }
+   }
+   p
+}
+
+# place legend either at the bottom or on the right, wherever it occupies less space
+# pack as tightly as possible
+add.color.legend <- function(p, data, x, aesth=c('color','fill')) {
+
+   aesth=match.arg(aesth)
+   p <- p + theme(legend.key.width=unit(0.5,'lines'))
+   if (is.numeric(data[[x]])) {
+      # color bars always on the right margin, to avoid number label overwriting
+      if (aesth == 'color') {
+         p <- p + guides(color=guide_colorbar(direction='vertical'), fill=FALSE)
+      } else {
+         p <- p + guides(fill=guide_colorbar(direction='vertical'), color=FALSE)
+      }
+      p <-  p + theme(legend.position='right', legend.background=element_blank())
+      return(p)
+   }
+
+   # rough estimate of key symbol plus spacing; in the default theme.gray(), net key size is 1.2 lines
+   size.key <- as.numeric(grid::convertX(unit(1.6, 'lines'), 'npc'))
+   title.length <- as.numeric(grid::convertX(unit(1, 'strwidth', x), 'npc'))
+   legend.margin <- as.numeric(unit(0.2, 'cm'))
+
+   # vertical placement
+   ll <- length(levels(data[[x]]))
+   npc.length <- sapply(levels(data[[x]]), function(x) grid::convertX(unit(1, 'strwidth', x), 'npc'))
+   npc.length <- sort(npc.length, decreasing=TRUE)
+   ncol.vert <- ceiling(ll*size.key)
+   nrow.vert <- ceiling(ll/ncol.vert)
+   npc.width.vert <- legend.margin + max(title.length, ncol.vert * (size.key + npc.length[1]))
+
+   # horizontal placement
+   # try out how many legend columns we can fit underneath the graph
+   ncol.horz <- 0
+   npc.horz <- title.length
+   while (ncol.horz < ll && (npc.horz + npc.length[ncol.horz+1] < 1)) {
+      ncol.horz <- ncol.horz + 1
+      npc.horz <- npc.horz + npc.length[ncol.horz] + size.key
+   }
+   nrow.horz <- ceiling(ll/ncol.horz)
+   npc.height.horz <- legend.margin + nrow.horz * size.key
+   aspect.ratio <- as.numeric(grid::convertX(unit(1, 'npc'),'cm')) /
+      as.numeric(grid::convertY(unit(1, 'npc'),'cm'))
+   if (npc.width.vert < aspect.ratio * npc.height.horz) {
+      # vertical - by column, starting with first level at the bottom
+      if (aesth == 'color') {
+         p <- p + guides(color=guide_legend(direction='vertical', byrow=FALSE,
+                                            reverse=TRUE, ncol=ncol.vert), fill=FALSE)
+      } else {
+         p <- p + guides(fill=guide_legend(direction='vertical', byrow=FALSE,
+                                           reverse=TRUE, ncol=ncol.vert), color=FALSE)
+      }
+      p + theme(legend.position='right', legend.background=element_blank())
+   } else {
+      # horizontal - by row
+      if (aesth == 'color') {
+         p <- p + guides(color=guide_legend(direction='horizontal', byrow=TRUE,
+                                       reverse=FALSE, nrow=nrow.horz), fill=FALSE)
+      } else {
+         p <- p + guides(fill=guide_legend(direction='horizontal', byrow=TRUE,
+                                      reverse=FALSE, nrow=nrow.horz), color=FALSE)
+      }
+      p + theme(legend.position='bottom', legend.background=element_blank())
+   }
+}
+
+add.smooth.line <- function(p, w='NULL', fill.smooth='NULL') {
+
+   if (w == 'NULL') {
+      # note: for more than 1000 points, ggplot2 uses mgcv package,
+      # leads to weird dependency issue
+      if (fill.smooth == 'NULL') {
+         p + geom_smooth(alpha=0.2, na.rm=TRUE)
+      } else {
+         p + geom_smooth(alpha=0.2, na.rm=TRUE, color=fill.smooth, fill=fill.smooth)
+      }
+   } else {
+      if (fill.smooth == 'NULL') {
+         p + geom_smooth(aes_string(weight=w), alpha=0.2, na.rm=TRUE)
+      } else {
+         p + geom_smooth(aes_string(weight=w), alpha=0.2, na.rm=TRUE, color=fill.smooth, fill=fill.smooth)
+      }
+   }
+}
+
+add.axis.transform <- function(p, data, x, ax=c('x','y'), trans.log.thresh=2) {
+   if (!is.numeric(data[[x]])) {
+      p
+   } else {
+      ax <- match.arg(ax)
+      trans <- get.trans.fun(data, x, trans.log.thresh)
+      if (ax == 'x') {
+         # note: "scale_x_continuous(trans=trans.x[[1]], name=trans.x[[2]])" doesn't allow
+         # to overwrite the label later
+         p + scale_x_continuous(trans=trans[[1]]) + xlab(trans[[2]])
+      } else {
+         p + scale_y_continuous(trans=trans[[1]]) + ylab(trans[[2]])
+      }
+   }
+}
 
 # 2D scatter plot of numeric or factor variables
 # - overlay smoothing line if both variables are numeric
-# - convert.duplicates.to.weights=TRUE - unique repeated points, count frequency
-# - convert.duplicates.to.weights=FALSE - plot each repeated point separately, add
-#   jitter if there are more than min.points.jitter in one location
-# - weights are drawn with a shaded circle of proportional area
-# - w.jitter, h.jitter - the amount of jittering, relative to total display
-# - factor.jitter - amount of jitterering for factors, absolute
+# - scatter.dedupe='area' - unique repeated points, count frequency
+# - scatter.dedupe='jitter' - plot each repeated point separately, add
+#   jitter if there are more than min.points.jitter with identical coordinates
+# - counts/weights are drawn with a shaded circle of proportional area
+# - jitter.x, jitter.y - the amount of jittering as a multiple of resolution
 # - trans.log.thresh - threshold to decide on log-transform
-#
-# assumption: x is factor or numeric, y is numeric
+# - fill.smooth - fill color for smoothing line
 gplt.scatter <- function(data, x, y, w='NULL',
-                         convert.duplicates.to.weights=TRUE,
+                         scatter.dedupe=c('area','jitter'),
                          min.points.jitter=3,
-                         w.jitter=0.01,
-                         h.jitter=0.01,
-                         factor.jitter=0.25,
+                         jitter.x=0.4,
+                         jitter.y=0.4,
                          trans.log.thresh=2,
-                         xlab=NULL,
-                         ylab=NULL,
+                         max.factor.levels=30,
+                         fill.smooth='NULL',
                          ...) {
 
-   if (is.null(xlab)) {
-      xlab <- x
-   }
-   if (is.null(ylab)) {
-      ylab <- y
+   scatter.dedupe <- match.arg(scatter.dedupe)
+   flip <- FALSE
+   if (is.numeric(data[[x]]) && (!is.numeric(data[[y]]))) {
+      # HACK: ggplot2 does not implement vertical dodging, therefore we
+      # use coord_flip() as a workaround
+      flip <- TRUE
+      tmp <- x
+      x <- y
+      y <- tmp
    }
 
    num.x <- is.numeric(data[[x]])
-
    num.y <- is.numeric(data[[y]])
+   ord.x <- is.ordered(data[[x]])
+   ord.y <- is.ordered(data[[y]])
 
-   if (convert.duplicates.to.weights) {
+   data <- order.factors(data, x, y, w=w)
+   for (v in c(x,y)) {
+      data <- limit.factor.levels(data, v, w=w,
+                                  max.levels=max.factor.levels)
+   }
+
+   if (scatter.dedupe == 'area') {
       # record frequency/total weight for each unique row of the data
       if (w == 'NULL') {
-         data <- ddply(data, names(data), function(D) nrow(D))
+         # equivalent to 'uniq -c'
+         data <- plyr::ddply(data, names(data), function(D) nrow(D))
          names(data)[length(data)] <- '.freq.'
          w <- '.freq.'
       } else {
-         data <- ddply(data, setdiff(names(data), w), function(D) sum(D[[w]]))
+         data <- plyr::ddply(data, setdiff(names(data), w), function(D) sum(D[[w]], na.rm=TRUE))
          names(data)[length(data)] <- w
       }
    }
 
-   use.weights <- (w != 'NULL' && length(unique(data[[w]])) > 1)
-
-   p <- ggplot(data, aes_string(x=x, y=y, weight=w,
-                                ymin=min(y, na.rm=TRUE),
-                                ymax=max(y, na.rm=TRUE),
-                                xmin=min(x, na.rm=TRUE),
-                                xmax=max(x, na.rm=TRUE)))
    # dodging
 
    if (!num.x) {
-      # note: if aesthetics xmin/xmax left unspecified, dodge width affects
-      # diagram area!
-      pos <- position_dodge(width=0.9)
+      # example involving dodging:
+      # i2<-iris
+      # i2$c<-factor(cut(i2$Petal.Width,3))
+      # names(i2)[6]<-'pw.quant'
+      # plotluck(Petal.width~Species|pw.quant,i2, opts=plotluck.options(geom='scatter'))
+      pos <- position_dodge(0.5)
    } else {
-      pos <- 'identity'
+      pos <- position_identity()
    }
 
-   alpha <- 0.6
-   if (nrow(data) > 1000) {
-      # if there are a lot of points, better make them transparent
-      alpha = 0.1
-   }
+   # if there are a lot of points, better make them transparent
+   alpha <- max(0.3, 0.8 - 0.8/2000 * nrow(data))
 
-   if (use.weights) {
+   p <- ggplot(data, aes_string(x=x, y=y, weight=w))
+
+   if (w != 'NULL' && length(unique(data[[w]])) > 1) {
+      # use point size to represent count/weight
       p <- p + geom_point(aes_string(size=w), alpha=alpha,
-                          position=pos, ...) +
-         scale_size_area(guide=FALSE)
+                          position=pos, na.rm=TRUE, ...) +
+         scale_size(guide=FALSE)
    } else {
-
-      if (max(table(data[, c(x, y)])) >= min.points.jitter) {
+      # use jittering
+      if (max(table(data[, c(x, y)], useNA='ifany')) >= min.points.jitter) {
          # test for repeated points, optionally jitter
          # - if both x and y are numeric, jitter in both directions
          # - if one is a factor, only jitter in this direction
          #   (enough empty space between levels)
-         if (num.x) {
-            if (num.y) {
-               w.jitter <- w.jitter * diff(range(data[[x]], na.rm=TRUE))
-               h.jitter <- h.jitter * diff(range(data[[y]], na.rm=TRUE))
-            } else {
-               # num.x, !num.y
-               w.jitter <- 0
-               h.jitter <- factor.jitter
-            }
-         } else {
-            # !num.x
-            if (num.y) {
-               w.jitter <- factor.jitter
-               h.jitter <- 0
-            } else {
-               w.jitter <- factor.jitter
-               h.jitter <- factor.jitter
-            }
-         }
+        if (num.x && !num.y) {
+          jitter.x <- 0
+          # resolution(data[[y]], zero=FALSE) == 1
+        } else if (!num.x && num.y) {
+          # resolution(data[[x]], zero=FALSE) == 1
+          jitter.y <- 0
+        } else {
+          jitter.x <- jitter.x * resolution(data[[x]], zero=FALSE)
+          jitter.y <- jitter.y * resolution(data[[y]], zero=FALSE)
+        }
       } else {
-         w.jitter <- 0
-         h.jitter <- 0
+         jitter.x <- 0
+         jitter.y <- 0
       }
 
-      p <- p + geom_point(alpha=alpha, position=position_jitter(width=w.jitter, height=h.jitter), ...)
+      p <- p + geom_point(alpha=alpha, position=position_jitter(width=jitter.x, height=jitter.y),
+                          na.rm=TRUE, ...)
    }
 
+   # draw smoothing line
    if (num.x && num.y) {
-      if (w == 'NULL' || w == '.freq.') {
-         # note: for more than 1000 points, ggplot2 uses mgcv package,
-         # leads to weird dependency issue
-         p <- p + geom_smooth(alpha=0.2)
-      } else {
-         p <- p + geom_smooth(aes(weight=w), alpha=0.2)
-      }
+      p <- add.smooth.line(p, w, fill.smooth)
    }
 
    # axis transformation
+   p <- add.axis.transform(p, data, x, 'x', trans.log.thresh)
+   p <- add.axis.transform(p, data, y, 'y', trans.log.thresh)
 
-   trans.x <- get.trans.fun(data, x, trans.log.thresh, xlab)
-   trans.y <- get.trans.fun(data, y, trans.log.thresh, ylab)
-
-   xlab <- trans.x[[2]]
-   ylab <- trans.y[[2]]
-
-   p <- p + xlab(xlab) + ylab(ylab)
-
-   if (num.x) {
-      p <- p + scale_x_continuous(trans=trans.x[[1]]) +
-         theme_panel_num_x
+   if (!flip) {
+      if (num.x) {
+         p <- p + theme_panel_num_x + theme_panel_num_y
+      } else {
+         p <- p + theme_panel_num_y
+         if (length(levels(data[[x]])) < 10) {
+            # grid lines for factors only necessary when very many
+            p <- p + theme_panel_fac_x
+         } else {
+            p <- p + theme(panel.grid.major.x=element_line(color='black', linetype='dotted'),
+                           panel.grid.minor.x=element_blank())
+         }
+         if (estimate.label.overlap(levels(data[[x]]))) {
+            p <- p + theme_slanted_text_x
+         }
+      }
    } else {
-      p <- p + theme_slanted_text_x +
-            theme_panel_fac_x
+      p <- p + coord_flip()
+      if (num.x) {
+         p <- p + theme_panel_num_y + theme_panel_num_x
+      } else {
+         p <- p + theme_panel_num_x
+         if (length(levels(data[[x]])) < 10) {
+            p <- p + theme_panel_fac_y
+         } else {
+            p <- p + theme(panel.grid.major.y=element_line(color='black', linetype='dotted'),
+                           panel.grid.minor.y=element_blank())
+         }
+      }
+   }
+   p
+}
+
+
+# hexbin plot with overlayed smoothing line
+gplt.hex <- function(data, x, y, w='NULL', trans.log.thresh=2,
+                     fill.smooth='NULL', ...) {
+
+   p <- ggplot(data, aes_string(x=x, y=y)) +
+      geom_hex(na.rm=TRUE, ...)
+
+   p <- add.smooth.line(p, w, fill.smooth)
+
+   # axis transformation
+   p <- add.axis.transform(p, data, x, 'x', trans.log.thresh)
+   p <- add.axis.transform(p, data, y, 'y', trans.log.thresh)
+
+   p +
+      # log scaling of color often reveals more details
+      scale_fill_gradientn(colors=c(hcl(66,60,95), hcl(128,100,35)), trans='log', guide=FALSE) +
+      theme(legend.position='right') +
+      theme_panel_num_x + theme_panel_num_y
+}
+
+
+# raster plot
+# point grid of discretized values, with optional discretized color (z)
+# the color is a representation of an appropriate central tendency measure
+# for the point bin (mode for factors, median for ordinal and numeric vectors)
+gplt.raster <- function(data, x, y, z='NULL', w='NULL', trans.log.thresh=2,
+                        max.factor.levels=30,
+                        raster.resolution=30,
+                        colors.gradient=c(hcl(66,60,85), hcl(128,100,35)),
+                        palette.brewer.seq='YlGn',
+                        palette.brewer.qual='Set1',
+                        ...) {
+
+   num.x <- is.numeric(data[[x]])
+   ord.x <- is.ordered(data[[x]])
+   num.y <- is.numeric(data[[y]])
+   ord.y <- is.ordered(data[[y]])
+
+   num.z <- FALSE
+   ord.z <- FALSE
+   ex.z <- (!is.null(z)) && (z != 'NULL')
+   if (ex.z) {
+      num.z <- is.numeric(data[[z]])
+      ord.z <- is.ordered(data[[z]])
+      if (!num.z && !ord.z) {
+         data <- order.factor.by.freq(data, z, w)
+      }
    }
 
-   if (num.y) {
-      p <- p + scale_y_continuous(trans=trans.y[[1]]) +
-       theme_panel_num_y
+   data <- order.factors(data, x, y, z, w)
+
+   # quantize variables
+   for (v in c(x,y)) {
+      if (is.numeric(data[[v]])) {
+         data <- discretize(data, v, w=w, max.breaks=raster.resolution, estimate.breaks=FALSE,
+                            method='histogram')
+      } else {
+         data <- limit.factor.levels(data, v, w=w,
+                                     max.levels=raster.resolution, tol=max.factor.levels)
+      }
+   }
+
+   g.vars <- names(data)
+   if (ex.z) {
+      g.vars <- setdiff(g.vars, z)
+   }
+
+   if (w != 'NULL') {
+      g.vars <- setdiff(g.vars, w)
+   }
+
+   # HACK: remove precomputed columns
+   g.vars <- setdiff(g.vars, '.center.')
+
+   # replace z values with group center
+   if (ex.z) {
+      data <- replace.by.central(data, z, g.vars, w)
+
+      if (num.z) {
+         # if z distribution is very skewed, better to quantize than to histogram
+         trans.z <- get.trans.fun(data, z, trans.log.thresh)
+         method <- 'histogram'
+         if (trans.z[[1]]$name != 'identity') {
+            method <= 'quantile'
+         }
+
+         # limited by color palette
+         data <- discretize(data, z, w=w, max.breaks=9, tol=9,
+                            estimate.breaks=FALSE, method=method)
+      } else {
+         data <- limit.factor.levels(data, z, w,
+                                      max.levels=9,
+                                      tol=9)
+      }
+      g.vars <- c(g.vars, z)
+   }
+
+   # sum up counts or weights
+   if (w == 'NULL') {
+      data <- plyr::ddply(data, g.vars, function(D) nrow(D))
+      names(data)[length(data)] <- '.freq.'
+      w <- '.freq.'
    } else {
-      p <- p + theme_panel_fac_y
+      data <- plyr::ddply(data, g.vars, function(D) sum(D[[w]], na.rm=TRUE))
+      names(data)[length(data)] <- w
+   }
+
+   p <- ggplot(data, aes_string(x=x, y=y, size=w, color=z, fill=z, weight=w)) +
+      geom_point(na.rm=TRUE, ...) +
+      scale_size(guide=FALSE)
+
+   # axis transformation
+   p <- add.axis.transform(p, data, x, 'x', trans.log.thresh)
+   p <- add.axis.transform(p, data, y, 'y', trans.log.thresh)
+
+   if (ex.z) {
+      p <- add.color.fill(p, data, z,
+                          colors.gradient=colors.gradient,
+                          palette.brewer.seq=palette.brewer.seq,
+                          palette.brewer.qual=palette.brewer.qual)
+      p <- add.color.legend(p, data, z, 'color')
+   }
+
+   # show gridlines
+   p <- p + theme_panel_num_x + theme_panel_num_y
+   if (!num.x && estimate.label.overlap(levels(data[[x]]))) {
+      p <- p + theme_slanted_text_x
    }
 
    p
 }
 
+# cleveland dot plot or bar plot with stat_bin
+# no log transforms for bars; see http://www.perceptualedge.com/articles/b-eye/dot_plots.pdf
+gplt.dot <- function(data, x, w='NULL', vertical=TRUE,
+                     max.factor.levels=30, geom=c('dot', 'bar'), ...) {
 
-# heat map
-gplt.heat <- function(data, x, y, z, w='NULL', ...) {
+   geom <- match.arg(geom)
 
-   # geom_tile can be directly applied without calling
-   # ddply explicitly; however, slow and color scale
-   # limits are based on original, not summarized data
+   if (!is.ordered(data[[x]])) {
+      data <- order.factor.by.freq(data, x, w)
+   }
 
-   x.data <- data[[x]]
-   y.data <- data[[y]]
-   z.data <- data[[z]]
+   data <- limit.factor.levels(data, x, w=w,
+                               max.levels=max.factor.levels)
 
-   # compute (weighted) means
+   ylab <- 'count'
+   if (w != 'NULL') {
+      ylab <- w
+   }
 
-   means <- group.center(data, z, c(x, y), w=w, method='mean')
-   names(means) <- c(x, y, z)
+   p <- ggplot(data, aes_string(x=x, weight=w))
+   if (geom == 'dot') {
+      # if there are only few points, plot direction is not obvious to the viewer
+      if (!vertical) {
+         shp <- '^'
+      } else {
+         shp <- '>'
+      }
+      p <- p + geom_point(stat='count', shape=shp, size=6, na.rm=TRUE, ...)
+   } else {
+      p <- p + geom_bar(position=position_dodge(), alpha=0.8, width=0.2, na.rm=TRUE, ...)
+   }
 
-   ggplot(means, aes_string(x=x, y=y, fill=z)) +
-      geom_tile(color=NA, ...) +
-      scale_fill_gradientn(colours=rev(grDevices::rainbow(2))) +
-      xlab(x) + ylab(y)
+   if (!vertical) {
+      p <- p + theme_panel_num_y + ylab(ylab)
+
+      if (length(levels(data[[x]])) < 10) {
+         p <- p + theme_panel_fac_x
+      } else {
+         p <- p + theme(panel.grid.major.x=element_line(color='black', linetype='dotted'),
+                        panel.grid.minor.x=element_blank())
+      }
+
+      if (estimate.label.overlap(levels(data[[x]]))) {
+         p <- p + theme_slanted_text_x
+      }
+
+   } else { # horizontal
+      p <- p + coord_flip() + theme_panel_num_x + ylab(ylab)
+      if (length(levels(data[[x]])) < 10) {
+         p <- p + theme_panel_fac_y
+      } else {
+         p <- p + theme(panel.grid.major.y=element_line(color='black', linetype='dotted'),
+                        panel.grid.minor.y=element_blank())
+      }
+   }
+   p
+}
+
+
+# violin plot with overlayed median point
+# assumption: x is factor, y is numeric
+gplt.violin <- function(data, x, y, w='NULL',
+                        trans.log.thresh=2,
+                        max.factor.levels=30,
+                        ...) {
+
+   flip <- FALSE
+   if (is.numeric(data[[x]])) {
+      if (is.numeric(data[[y]])) {
+         stop('violin plot requires one factor variabe')
+      }
+      flip <- TRUE
+      tmp <- x
+      x <- y
+      y <- tmp
+   }
+   # note: geom_violin throws an error if all values are equal
+   # workaround: add very small jitter
+   data[[y]] <- data[[y]] +
+      1E-8 * min(data[[y]], na.rm=TRUE) * (runif(nrow(data)) - 0.5)
+
+   if (!is.ordered(data[[x]])) {
+      data <- order.factor.by.value(data, x, y, w)
+   }
+
+   data <- limit.factor.levels(data, x, w=w,
+                               max.levels=max.factor.levels)
+
+   p <- ggplot(data, aes_string(x=x, y=y, weight=w, ymax=max(y,na.rm=TRUE))) +
+      geom_violin(scale='width', alpha=0.8, na.rm=TRUE, ...)
+
+   if ('.center.' %in% names(data)) {
+      # dodge does not work correctly when width is not specified
+      # see https://github.com/hadley/ggplot2/issues/525
+      p <- p + geom_point(mapping=aes(y=.center.),
+                          position=position_dodge(width=0.9),
+                          size=2, shape=1, na.rm=TRUE)
+   }
+
+   # axis transformation
+   p <- add.axis.transform(p, data, y, 'y', trans.log.thresh)
+
+   if (!flip) {
+      p <- p + theme_panel_fac_x + theme_panel_num_y
+
+      if (estimate.label.overlap(levels(data[[x]]))) {
+         p <- p + theme_slanted_text_x
+      }
+
+   } else {
+      p <- p + coord_flip() + theme_panel_fac_y + theme_panel_num_x
+   }
+   p
+}
+
+
+# box plot
+# assumption: x is factor, y is numeric
+gplt.box <- function(data, x, y, w='NULL',
+                     trans.log.thresh=2,
+                     max.factor.levels=30,
+                     ...) {
+
+   flip <- FALSE
+   if (is.numeric(data[[x]])) {
+      if (is.numeric(data[[y]])) {
+         stop('box plot requires one factor variabe')
+      }
+      flip <- TRUE
+      tmp <- x
+      x <- y
+      y <- tmp
+   }
+
+   if (!is.ordered(data[[x]])) {
+      data <- order.factor.by.value(data, x, y, w)
+   }
+
+   data <- limit.factor.levels(data, x, w=w,
+                               max.levels=max.factor.levels)
+
+   p <- ggplot(data, aes_string(x=x, y=y, weight=w, ymax=max(y,na.rm=TRUE))) +
+      geom_boxplot(alpha=0.8, na.rm=TRUE, ...)
+
+   # axis transformation
+   p <- add.axis.transform(p, data, y, 'y', trans.log.thresh)
+
+   if (!flip) {
+      p <- p + theme_panel_fac_x + theme_panel_num_y
+
+      if (estimate.label.overlap(levels(data[[x]]))) {
+         p <- p + theme_slanted_text_x
+      }
+   } else {
+      p <- p + coord_flip() + theme_panel_fac_y + theme_panel_num_x
+   }
+   p
+}
+
+
+# density plot with overlayed vertical median lines
+gplt.density <- function(data, x, w='NULL',
+                         trans.log.thresh=2,
+                         ...) {
+
+   p <- ggplot(data, aes_string(x=x, weight=w)) +
+      geom_density(aes(y=..scaled..), alpha=0.6, adjust=0.5, trim=TRUE, na.rm=TRUE, ...) +
+      geom_rug(na.rm=TRUE)
+
+   # geom_vline cannot be used, see https://github.com/hadley/ggplot2/issues/426
+   # .center. explicitly precomputed before
+   # known issue: color cannot be set here, dependent on conditional layer
+   # (does not automatically inherit)
+   if ('.center.' %in% names(data)) {
+      p <- p + geom_vline(aes(xintercept=.center.), linetype='dashed', size=0.7, na.rm=TRUE)
+   }
+
+   # axis transformation
+   p <- add.axis.transform(p, data, x, 'x', trans.log.thresh)
+
+   ylab <- 'density'
+   if (w != 'NULL') {
+      ylab <- sprintf('%s density', w)
+   }
+
+   p + ylab(ylab) +
+      # density numbers themselves not very meaningful
+      theme(axis.ticks.y=element_blank(),
+            axis.text.y=element_blank()) +
+      theme_panel_num_x
+}
+
+# histogram plot with overlayed vertical median lines
+gplt.histogram <- function(data, x, w='NULL',
+                           n.breaks=NA,
+                           trans.log.thresh=2,
+                           ...) {
+
+   if (is.numeric(n.breaks)) {
+      n.breaks <- n.breaks
+   } else {
+      n.breaks <- nclass.FD.modified(data[[x]])
+   }
+   bin.width <- diff(range(data[[x]], na.rm=TRUE))/n.breaks
+   p <- ggplot(data, aes_string(x=x, weight=w)) +
+      geom_histogram(binwidth=bin.width, position='identity', alpha=0.6, na.rm=TRUE, ...) +
+      geom_rug(na.rm=TRUE)
+
+   if ('.center.' %in% names(data)) {
+      p <- p + geom_vline(aes(xintercept=.center.), linetype='dashed', size=0.7, na.rm=TRUE)
+   }
+
+   # axis transformation
+   p <- add.axis.transform(p, data, x, 'x', trans.log.thresh)
+
+   ylab <- 'count'
+   if (w != 'NULL') {
+      ylab <- w
+   }
+
+   p + ylab(ylab) +
+      theme_panel_num_x + theme_panel_num_y
 }
 
 
 # spine plot of two variables
-# note: We could use mosaicplot, but we want to consistentl stick with ggplot
+# note: We could use mosaicplot, but we want to consistently stick with ggplot
 #    another option would be the prodplots package, but currently seems
 #    to be in development stage
 #
 # - plot.margin.x - horizontal gap between rectangles for x-values
 # - no gaps between y-rectangles
-# - exclude-factor - flag to apply in factor(...) calls, to preserve NA values
-#   if required
+#
+# note: additional columns other than x,y,w are dropped; this precludes later
+# faceting on them. They could be preserved, however this function is already
+# complicated as it is.
+
 gplt.spine <- function(data, x, y, w='NULL',
                        plot.margin.x=0.05,
-                       exclude.factor=NA,
+                       max.factor.levels=10,
+                       colors.gradient=c(hcl(66,60,85), hcl(128,100,35)),
+                       palette.brewer.seq='YlGn',
+                       palette.brewer.qual='Set1',
                        ...) {
 
-   for (n in c(x, y)) {
-      if (is.numeric(data[[n]])) {
-         data[[n]] <- quantize(data, n, w=w)
-      }
+   # ordering and factor truncation
+   data <- order.factors(data, x, y, w=w)
+   for (v in c(x, y)) {
+      data <- quantize(data, v, w=w, n.levels=max.factor.levels)
    }
 
    x.lev <- length(levels(data[[x]]))
    y.lev <- length(levels(data[[y]]))
 
-   xy.tab  <- marginalize(data, c(x, y), w, exclude.factor=exclude.factor)
-   x.tab   <- marginalize(data, x, w, exclude.factor=exclude.factor)
+   xy.tab  <- marginalize(data, c(x, y), w)
+   x.tab   <- marginalize(data, x, w)
    y.cond  <- sweep(xy.tab, 1, x.tab, FUN='/')
 
    x.tab.df             <- as.data.frame(x.tab, responseName='x.mrg')
@@ -721,16 +1473,30 @@ gplt.spine <- function(data, x, y, w='NULL',
    plot.data$bottom   <- plot.data$y.cond.cum
    plot.data$top      <- plot.data$bottom     + plot.data$y.cond
 
-   ggplot(plot.data, aes(xmin=left, xmax=right, ymin=bottom, ymax=top)) +
+   # remove empty rects
+   idx <- plot.data$bottom < plot.data$top & plot.data$left < plot.data$right
+   plot.data <- plot.data[idx,]
+
+   p <- ggplot(plot.data, aes(xmin=left, xmax=right, ymin=bottom, ymax=top)) +
       # make outline color same as fill color - black outline will hide colors
       # for very narrow stripes
-      geom_rect(aes_string(fill=y, col=y), ...) +
+      geom_rect(aes_string(color=y, fill=y), alpha=0.6, na.rm=TRUE, ...) +
       scale_x_continuous(breaks=x.tab.df$x.center, labels=levels(data[[x]])) +
       theme(axis.ticks.x=element_blank()) +
-      # y reflected in color legend
-      xlab(x) + ylab('') +
-      # for factors, write horizontal axis labels at an angle to avoid overlap
-      theme_slanted_text_x
+      # y reflected in color legend; however, we do want the label when part of a multiplot!
+      xlab(x)  + ylab(y)
+      theme_panel_num_y
+
+   p <- add.color.fill(p, data, y,
+                       colors.gradient=colors.gradient,
+                       palette.brewer.seq=palette.brewer.seq,
+                       palette.brewer.qual=palette.brewer.qual)
+   p <- add.color.legend(p, data, y, 'fill')
+
+   if (estimate.label.overlap(labels=levels(data[[x]]), breaks=x.tab.df$x.center)) {
+      p <- p + theme_slanted_text_x
+   }
+   p
 }
 
 
@@ -738,27 +1504,29 @@ gplt.spine <- function(data, x, y, w='NULL',
 # - plot.margin.x - horizontal gap between rectangles for x-values
 # - plot.margin.y - vertical gap between rectangles for y-values
 # - no gaps between z-rectangles
-# - exclude-factor - flag to apply in factor(...) calls, to preserve NA values
-#   if required
 gplt.spine3 <- function(data, x, y, z, w='NULL',
                         plot.margin.x=0.05,
                         plot.margin.y=0.02,
-                        exclude.factor=NA, ...) {
+                        max.factor.levels=10,
+                        colors.gradient=c(hcl(66,60,85), hcl(128,100,35)),
+                        palette.brewer.seq='YlGn',
+                        palette.brewer.qual='Set1',
+                        ...) {
 
-   for (n in c(x, y, z)) {
-      if (is.numeric(data[[n]])) {
-         data[[n]] <- quantize(data, n, w=w)
-      }
+   # ordering and factor truncation
+   data <- order.factors(data, x, y, z, w=w)
+   for (v in c(x, y, z)) {
+      data <- quantize(data, v, w=w, n.levels=max.factor.levels)
    }
 
    x.lev <- length(levels(data[[x]]))
    y.lev <- length(levels(data[[y]]))
    z.lev <- length(levels(data[[z]]))
 
-   xyz.tab <- marginalize(data, c(x, y, z), w, exclude.factor=exclude.factor)
-   xy.tab  <- marginalize(data, c(x, y), w, exclude.factor=exclude.factor)
-   x.tab   <- marginalize(data, x, w, exclude.factor=exclude.factor)
-   y.tab   <- marginalize(data, y, w, exclude.factor=exclude.factor)
+   xyz.tab <- marginalize(data, c(x, y, z), w)
+   xy.tab  <- marginalize(data, c(x, y), w)
+   x.tab   <- marginalize(data, x, w)
+   y.tab   <- marginalize(data, y, w)
    y.cond  <- sweep(xy.tab, 1, x.tab, FUN='/')
    z.cond  <- sweep(xyz.tab, 1:2, xy.tab, FUN='/')
 
@@ -788,197 +1556,33 @@ gplt.spine3 <- function(data, x, y, z, w='NULL',
    plot.data$bottom   <- plot.data$y.cond.cum + plot.data$y.cnt * plot.margin.y
    plot.data$top      <- plot.data$bottom     + plot.data$y.cond
 
-   ggplot(plot.data, aes(xmin=left, xmax=right, ymin=bottom, ymax=top)) +
+   # remove empty rects
+   idx<-plot.data$bottom < plot.data$top & plot.data$left < plot.data$right
+   plot.data <- plot.data[idx,]
+
+   p <- ggplot(plot.data, aes(xmin=left, xmax=right, ymin=bottom, ymax=top)) +
       # make outline color same as fill color - black outline will hide colors
       # for very narrow stripes
-      geom_rect(aes_string(fill=z, col=z), ...) +
+      geom_rect(aes_string(fill=z, col=z), alpha=0.6, na.rm=TRUE, ...) +
       scale_y_continuous(breaks=y.tab.df$y.center, labels=levels(data[[y]])) +
-      scale_x_continuous(breaks=x.tab.df$x.center, labels=levels(data[[x]])) +
-      xlab(x) + ylab(y) +
-      # write labels slanted to mitigate overlap
+      scale_x_continuous(breaks=x.tab.df$x.center, labels=levels(data[[x]]))
+
+   p <- add.color.fill(p, data, z,
+                       colors.gradient=colors.gradient,
+                       palette.brewer.seq=palette.brewer.seq,
+                       palette.brewer.qual=palette.brewer.qual)
+   p <- add.color.legend(p, data, z, 'fill')
+
+   p <- p + xlab(x) + ylab(y) +
+      theme_panel_num_y +
       theme(axis.ticks.x=element_blank(),
             axis.ticks.y=element_blank())
-}
 
-# bar plot with stat_bin
-# no log transforms for bars; see http://www.perceptualedge.com/articles/b-eye/dot_plots.pdf
-gplt.bar <- function(data, x, w='NULL', ...) {
-   p <- ggplot(data, aes_string(x=x, weight=w)) +
-      geom_bar(...) + xlab(x)
-   if (w == 'NULL') {
-      p <- p + ylab('count')
-   } else {
-      p <- p + ylab(w)
+   # write labels slanted to mitigate overlap
+   if (estimate.label.overlap(labels=levels(data[[x]]), breaks=x.tab.df$x.center)) {
+      p <- p + theme_slanted_text_x
    }
-   p + theme_slanted_text_x + theme_panel_fac_x + theme_panel_num_y
-}
-
-# bar plot with single point each
-# log transform not useful
-gplt.bar.identity <- function(data, x, y, z='NULL', w='NULL', ...) {
-   ggplot(data, aes_string(x=x, y=y, color=z, weight=w)) +
-      geom_bar(stat='identity', position=position_dodge(), ...) +
-      xlab(x) + ylab(y) +
-      theme_slanted_text_x + theme_panel_fac_x + theme_panel_num_y
-}
-
-# violin plot with overlayed median points
-# assumption: x is factor, y is numeric
-gplt.violin <- function(data, x, y, w='NULL',
-                        trans.log.thresh=2, xlab=NULL, ylab=NULL, ...) {
-
-   if (is.null(xlab)) {
-      xlab <- x
-   }
-   if (is.null(ylab)) {
-      ylab <- y
-   } else {
-      ylab <- NULL
-   }
-
-   # note: geom_violin throws an error if all values are equal
-   # workaround: add very small jitter
-   data[[y]] <- data[[y]] +
-      1E-8 * min(data[[y]], na.rm=TRUE) * (runif(nrow(data)) - 0.5)
-
-   p <- ggplot(data, aes_string(x=x, y=y, weight=w, ymax=max(y,na.rm=TRUE))) +
-      geom_violin(scale='width', ...)
-
-   if ('.center.' %in% names(data)) {
-      # dodge does not work correctly when width is not specified
-      # see https://github.com/hadley/ggplot2/issues/525
-      p <- p + geom_point(mapping=aes(y=.center.),
-                          position=position_dodge(width=0.9),
-                          size=2, shape=1)
-   }
-
-   # axis transformation
-   trans.y <- get.trans.fun(data, y, trans.log.thresh, ylab)
-   ylab <- trans.y[[2]]
-
-   p + scale_y_continuous(trans=trans.y[[1]]) + xlab(xlab) + ylab(ylab) +
-      theme_slanted_text_x + theme_panel_fac_x + theme_panel_num_y
-}
-
-
-# box plot with overlayed median points
-# assumption: x is factor, y is numeric
-gplt.box <- function(data, x, y, w='NULL',
-                     trans.log.thresh=2, xlab=NULL, ylab=NULL, ...) {
-
-   if (is.null(xlab)) {
-      xlab <- x
-   }
-   if (is.null(ylab)) {
-      ylab <- y
-   } else {
-      ylab <- NULL
-   }
-
-   # axis transformation
-   trans.y <- get.trans.fun(data, y, trans.log.thresh, ylab)
-   ylab <- trans.y[[2]]
-
-   ggplot(data, aes_string(x=x, y=y, weight=w, ymax=max(y,na.rm=TRUE))) +
-      geom_boxplot(...) +
-      scale_y_continuous(trans=trans.y[[1]]) + xlab(xlab) + ylab(ylab) +
-      theme_slanted_text_x + theme_panel_fac_x + theme_panel_num_y
-}
-
-
-# density plot with overlayed vertical median lines
-gplt.density <- function(data, x, w='NULL',
-                         trans.log.thresh=2,
-                         xlab=NULL,
-                         ...) {
-   if (is.null(xlab)) {
-      xlab <- x
-   }
-
-   p <- ggplot(data, aes_string(x=x, weight=w)) +
-      geom_density(aes(y=..scaled..), adjust=0.5, trim=TRUE, na.rm=TRUE, ...)
-
-   # geom_vline cannot be used, see https://github.com/hadley/ggplot2/issues/426
-   if ('.center.' %in% names(data)) {
-      p <- p + geom_vline(aes(xintercept=.center.), linetype='dashed', size=0.7)
-   }
-
-   # axis transformation
-   trans.x <- get.trans.fun(data, x, trans.log.thresh, xlab)
-
-   ylab <- 'density'
-   if (w != 'NULL') {
-      ylab <- sprintf('%s density', w)
-   }
-
-   p + scale_x_continuous(trans=trans.x[[1]]) +
-      xlab(trans.x[[2]]) + ylab(ylab) +
-      # density numbers themselves not very meaningful
-      theme(axis.ticks.y=element_blank(),
-            axis.text.y=element_blank()) +
-      theme_panel_num_x
-}
-
-# histogram plot with overlayed vertical median lines
-gplt.histogram <- function(data, x, w='NULL',
-                           n.breaks=NA,
-                           trans.log.thresh=2,
-                           xlab=NULL,
-                           ...) {
-   if (is.null(xlab)) {
-      xlab <- x
-   }
-   ylab <- ''
-
-   if (is.numeric(n.breaks)) {
-      n.breaks <- n.breaks
-   } else {
-      n.breaks <- nclass.FD.modified(data[[x]])
-   }
-   bin.width <- diff(range(data[[x]], na.rm=TRUE))/n.breaks
-   p <- ggplot(data, aes_string(x=x, weight=w)) +
-      geom_histogram(binwidth=bin.width, position='identity', ...)
-
-   if ('.center.' %in% names(data)) {
-      p <- p + geom_vline(aes(xintercept=.center.), linetype='dashed', size=0.7)
-   }
-
-   # axis transformation
-   trans.x <- get.trans.fun(data, x, trans.log.thresh, xlab)
-
-   ylab <- 'count'
-   if (w != 'NULL') {
-      ylab <- w
-   }
-
-   p + scale_x_continuous(trans=trans.x[[1]]) + xlab(trans.x[[2]]) + ylab(ylab) +
-      theme_panel_num_x + theme_panel_num_y
-}
-
-
-# hexbin plot with overlayed smoothing line
-gplt.hex <- function(data, x, y, w='NULL', trans.log.thresh=2,
-                     xlab=NULL, ylab=NULL, ...) {
-   if (is.null(xlab)) {
-      xlab <- x
-   }
-   if (is.null(ylab) && y != 'NULL') {
-      ylab <- y
-   }
-
-   # axis transformation
-   trans.x <- get.trans.fun(data, x, trans.log.thresh, xlab)
-   trans.y <- get.trans.fun(data, y, trans.log.thresh, ylab)
-
-   ggplot(data, aes_string(x=x, y=y, weight=w)) +
-      geom_hex(...) +
-      geom_smooth() +
-      scale_x_continuous(trans=trans.x[[1]]) +
-      scale_y_continuous(trans=trans.y[[1]]) +
-      # log scaling of color often reveals more details
-      scale_fill_gradientn(colours=rev(grDevices::rainbow(2)), trans='log') +
-      xlab(trans.x[[2]]) + ylab(trans.y[[2]]) +
-      theme_panel_num_x + theme_panel_num_y
+   p
 }
 
 
@@ -1048,74 +1652,46 @@ gplt.blank <- function(text=NULL, ...) {
 #' plotluck(iris, Species, Petal.Length, opts=plotluck.options(use.geom.violin=FALSE))
 #'
 #'@export
-plotluck.options <- function(...) {
+plotluck.options <- function(opts,...) {
+   if (missing(opts)) {
    opts <- list(
-      max.factor.levels=100,
-      few.unique.as.factor=10,
-      discretize.intervals.z=5,
+      na.rm=FALSE,
+      geom='auto',
+      sample.max.rows=100000,
+      trans.log.thresh=2,
+      n.breaks.histogram=NA,
       min.points.hex=5000,
       min.points.density=20,
-      min.points.box=10,
-      min.size.grid.heat=2,
-      min.coverage.heat=0.5,
-      convert.duplicates.to.weights=TRUE,
+      min.points.box=20,
+      raster.resolution=30,
+      scatter.dedupe='area',
       min.points.jitter=3,
-      width.jitter=0.01,
-      height.jitter=0.01,
-      factor.jitter=0.25,
-      max.colors.scatter=3,
-      max.colors.density=3,
-      max.colors.box=3,
-      max.colors.bar=3,
-      trans.log.thresh=2,
+      jitter.x=0.4,
+      jitter.y=0.4,
+      max.factor.levels=30,
+      few.unique.as.factor=5,
+      max.color.factors=3,
+      max.factor.levels.violin=20,
+      max.factor.levels.spine.x=20,
+      max.factor.levels.spine.y=10,
+      max.factor.levels.spine.z=5,
       spine.plot.margin.x=0.05,
       spine.plot.margin.y=0.02,
-      max.sample.rows=100000,
-      use.geom.violin=TRUE,
-      max.levels.violin=20,
-      use.geom.density=TRUE,
-      n.breaks.histogram=NA,
-      max.facets.column=10,
-      max.facets.row=10,
-      exclude.factor=NULL,
+      facet.max.cols=10,
+      facet.max.rows=10,
+      facet.num.wrap=6,
+      facet.num.grid=3,
+      prefer.factors.vert=TRUE,
       fill.default='deepskyblue',
-      alpha.default=0.3)
+      colors.gradient=c(hcl(66,60,85), hcl(128,100,35)),
+      palette.brewer.seq='YlGn',
+      palette.brewer.qual='Set1',
+      multi.entropy.order=TRUE,
+      multi.max.rows=6,
+      multi.max.cols=6,
+      multi.in.grid=TRUE)
+   }
    overrides <- list(...)
-
-   # shortcut options
-   if ('prefer.color.for.z' %in% names(overrides)) {
-      use.color.for.z <- overrides[['prefer.color.for.z']]
-      overrides['prefer.color.for.z'] <- NULL
-      if (!is.na(use.color.for.z)) {
-         if (use.color.for.z) {
-            opts$max.colors.scatter <- Inf
-            opts$max.colors.density <- Inf
-            opts$max.colors.box     <- Inf
-            opts$max.colors.bar     <- Inf
-         } else {
-            opts$max.colors.scatter <- 0
-            opts$max.colors.density <- 0
-            opts$max.colors.box     <- 0
-            opts$max.colors.bar     <- 0
-         }
-      }
-   }
-   if ('prefer.scatter' %in% names(overrides)) {
-      prefer.scatter <- overrides[['prefer.scatter']]
-      overrides['prefer.scatter'] <- NULL
-      if (!is.na(prefer.scatter)) {
-         if (prefer.scatter) {
-            opts$min.points.hex <- Inf
-            opts$min.points.density <- Inf
-            opts$min.points.box     <- Inf
-         } else {
-            opts$min.points.hex <- 0
-            opts$min.points.density <- 0
-            opts$min.points.box     <- 0
-         }
-      }
-   }
-
    unknown <- setdiff(names(overrides), names(opts))
    if (length(unknown) > 0) {
       stop(sprintf('Unknown options: %s', paste(unknown, sep='',collapse =', ')))
@@ -1136,6 +1712,104 @@ sample.data <- function(data, w='NULL', max.rows) {
          data <- data[sample(1:n.row, max.rows, prob=data[[w]]),, drop=FALSE]
       }
    }
+   data
+}
+
+# expected input formula: 'x', 'x*y', 'x+y', 'x+1'
+# output: list of occurring variables, ignoring constants
+parse.formula.term <- function(form) {
+   if (class(form) == 'numeric') {
+      return(character())
+   }
+   if (class(form) == 'name') {
+      return(as.character(form))
+   }
+   if (as.character(form[[1]]) %in% c('+', '*')) {
+      res <- character()
+      if (class(form[[2]]) == 'name') {
+         res <- as.character(form[[2]])
+      } else if (class(form[[2]]) != 'numeric') {
+         stop('invalid formula: at most two dependent or conditional variables allowed')
+      }
+      if (class(form[[3]]) == 'name') {
+         res <- c(res, as.character(form[[3]]))
+      } else if (class(form[[3]]) != 'numeric') {
+         stop('invalid formula: at most two dependent or conditional variables allowed')
+      }
+      return(res)
+   }
+   stop('invalid formula')
+}
+
+# expected input: conditional formula with up to three variables
+# output: list of lists (response, independent variable, conditionals)
+parse.formula <- function(form) {
+   if (as.character(form[[1]]) != '~') {
+      stop('invalid formula')
+   }
+   node <- form[[2]]
+   if (class(node) != 'name') {
+      stop('invalid formula: only one dependent variable allowed')
+   }
+   resp <- as.character(node)
+   indep <- character()
+   cond <- character()
+
+   node <- form[[3]]
+   if (class(node) != 'name' && as.character(node[[1]])  == '|') {
+      indep <- parse.formula.term(node[[2]])
+      cond <- parse.formula.term(node[[3]])
+   } else {
+      indep <- parse.formula.term(node)
+   }
+
+   if (resp != '.' && (resp %in% indep || resp %in% cond)) {
+     stop('invalid formula: variable cannot be both dependent and independent')
+   }
+   if (length(intersect(indep,cond))>0) {
+     stop('variables can only be used once')
+   }
+   if (length(indep)+length(cond) > 2) {
+     stop('invalid formula: at most 3 variables allowed')
+   }
+   return(list(resp, indep, cond))
+}
+
+# try to match user input to column names, if not exact
+correct.varnames <- function(x, data) {
+   if (length(x) == 0 || x == '.') {
+      return(x)
+   }
+   for (i in seq(length(x))) {
+      idx <- pmatch(tolower(x[i]), tolower(names(data)))
+      if (!is.na(idx)) {
+         x[i] <- names(data)[idx]
+      } else {
+         stop(sprintf('no such variable: %s', x[i]))
+      }
+   }
+   x
+}
+
+# process weights
+process.weights <- function(data, weights) {
+   if (weights == 'NULL') {
+      return(data)
+   }
+
+   if  (!is.numeric(data[[weights]])) {
+      stop('Weight must be numeric')
+   }
+   if  (any(data[[weights]]<0)) {
+      stop('Weight must be non-negative')
+   }
+   weight.na <- is.na(data[[weights]])
+   if  (any(weight.na)) {
+      warning('Weight is NA for %d instances, deleting', length(which(weight.na)))
+      data <- data[!weight.na,]
+   }
+   # if weights are integer type, Hmisc::wtd.quantile() can lead to NA due to overflow
+   data[[weights]] <- as.double(data[[weights]])
    data
 }
 
@@ -1206,7 +1880,7 @@ sample.data <- function(data, w='NULL', max.rows) {
 #' color; or as determined by the options \code{max.colors.scatter},
 #' \code{max.colors.density}, \code{max.colors.box}, or \code{max.colors.bar}),
 #' facetting is used, in a direction (i.e., horizontally or vertically subject
-#' to \code{max.facets.row} and \code{max.facets.column})  that facilitates
+#' to \code{facet.max.rows} and \code{facet.max.cols})  that facilitates
 #' comparing the particular type of plot. To this end, a numerical \code{z}
 #' variable is discretized into \code{discretize.intervals.z} many intervals of
 #' equal count or weight.
@@ -1248,11 +1922,11 @@ sample.data <- function(data, w='NULL', max.rows) {
 #'
 #'  There is some redundancy with regard to \emph{repeated points}, since they
 #'  are conceptually identical to unique points with an associated frequency
-#'  weight. By default, the option \code{convert.duplicates.to.weights} is
+#'  weight. By default, the option \code{scatter.dedupe} is
 #'  switched on, which does exactly this. If it is \code{FALSE}, horizontal and
 #'  vertical jittering will be applied if the number of duplicated points
 #'  exceeds \code{min.points.jitter}. The amount of jittering can be controlled
-#'  with \code{width.jitter}, \code{height.jitter}, and \code{factor.jitter}.
+#'  with \code{jitter.x} and \code{jitter.y}.
 #'
 #'@section Axis scaling: \code{plotluck} supports logarithmic and log-modulus
 #'  axis scaling. log-modulus is considered if values are both positive and
@@ -1275,7 +1949,7 @@ sample.data <- function(data, w='NULL', max.rows) {
 #'
 #'@section Sampling: For very large data sets, plots can take a very long time
 #'  (or even crash R). \code{plotluck} has a built-in stop-gap: If the data
-#'  comprises more than \code{max.sample.rows}, it will be sampled down to that
+#'  comprises more than \code{sample.max.rows}, it will be sampled down to that
 #'  size (taking weights into account, if supplied).
 #'
 #'@section Factor preprocessing: Frequently, when numeric variables have very
@@ -1298,7 +1972,7 @@ sample.data <- function(data, w='NULL', max.rows) {
 #'  choice of the number of bins of a histogram can create misleading artifacts.
 #'
 #'  If the resulting graph would contain too many (more than
-#'  \code{max.levels.violin}) violin plots in a row, the algorithm switches to
+#'  \code{max.factor.levels.violin}) violin plots in a row, the algorithm switches to
 #'  box plots. The defaults can also be directly overriden by changing options
 #'  \code{use.geom.violin} and \code{use.geom.density}. The number of bins of a
 #'  histogram can be customized with \code{n.breaks.histogram}. The default
@@ -1383,464 +2057,545 @@ sample.data <- function(data, w='NULL', max.rows) {
 #' # spine plot
 #' plotluck(as.data.frame(Titanic), Class, Sex, Survived, w=Freq)
 
-plotluck <- function(data, x, y=NULL, z=NULL, w=NULL,
-                     opts=plotluck.options(),
-                     ...) {
+plotluck <- function(formula, data, weights,
+                          opts=plotluck.options(),
+                          ...) {
+   parsed <- parse.formula(formula)
+   response <- correct.varnames(parsed[[1]], data)
+   indep <- correct.varnames(parsed[[2]], data)
+   cond <- correct.varnames(parsed[[3]], data)
 
-   x <- deparse(substitute(x))
-   y <- deparse(substitute(y))
-   z <- deparse(substitute(z))
-   w <- deparse(substitute(w))
+   vars <- c(response, indep, cond)
+   if (!missing(weights)) {
+      weights <- correct.varnames(deparse(substitute(weights)), data)
+      vars <- c(vars, weights)
+   } else {
+      # note: we set missing aesthetics to 'NULL' instead of NULL, because
+      # then ggplot interprets it correctly as a constant [e.g., aes(weights='NULL')]
+      weights <- 'NULL'
+   }
+   vars <- unique(vars)
 
-   # match partial column names, if unambiguous
-   cols.lc <- tolower(names(data))
+   if ('.' %in% vars) {
+      # trellis of plots
+      return(plotluck.multi(response, indep, data, w=weights,
+                            in.grid=opts$multi.in.grid,
+                            max.rows=opts$multi.max.rows,
+                            max.cols=opts$multi.max.cols,
+                            opts=opts,
+                            ...))
+   }
 
-   for (n in c('x', 'y', 'z', 'w')) {
-      n.val <- tolower(get(n))
-      if (n.val != 'null') {
-         idx <- pmatch(tolower(n.val), cols.lc)
-         if (is.na(idx)) {
-            # if several are matching, find all of them
-            idx <- which(!is.na(sapply(cols.lc, function(tab, x) pmatch(x, tab), x=n.val)))
+   # validation and preprocessing
+   data <- data[,vars, drop=FALSE]
+   data <- process.weights(data, weights)
+   data <- preprocess.factors(data, opts$na.rm)
+   data <- sample.data(data, weights, opts$sample.max.rows)
 
-            if (length(idx) == 0) {
-               stop(sprintf('No match for "%s" in data columns', n.val))
-            } else {
-               stop(sprintf('Ambiguous match for "%s": %s', n.val, paste(names(data)[idx], sep='', collapse=',')))
-            }
+   for (v in c(response, indep)) {
+      if (is.numeric(data[[v]])) {
+         data <- discretize.few.unique(data, v, opts$few.unique.as.factor)
+      }
+   }
+
+   # conditionals: discretize if numeric, and order
+   # note: to have a single data frame containing all plot and facet variables,
+   # we have to preprocess the conditionals beforehand.
+
+   if (length(cond) > 0) {
+
+      # if we have to discretize, we want that many facets
+      intervals <- opts$facet.num.wrap
+      if (length(cond) == 2) {
+         intervals <- opts$facet.num.grid
+      }
+
+      order.by <- NULL
+      if (is.numeric(data[[response]]) || is.ordered(data[[response]])) {
+         order.by <- response
+      } else if (length(indep) == 1 &&
+                 (is.numeric(data[[indep]]) || is.ordered(data[[indep]]))) {
+         order.by <- indep
+      }
+
+      for (i in seq(length(cond))) {
+         if (is.numeric(data[[cond[i]]])) {
+            data <- discretize(data, cond[i], w=weights, max.breaks=intervals,
+                                          estimate.breaks=FALSE, method='histogram')
          } else {
-            assign(n, names(data)[idx])
-            if (all(is.na(data[[idx]]))) {
-               stop(sprintf('Variable %s is completely missing, giving up', names(data)[idx]))
+            data <- limit.factor.levels(data, cond[i], w=weights,
+                                         max.levels=opts$max.factor.levels)
+            if (!is.ordered(data[[cond[i]]])) {
+               data <- order.factor.by.value(data, cond[i], order.by, weights)
             }
          }
       }
    }
 
-   if (y == 'NULL' && z != 'NULL') {
-      stop('z can only be specified together with y')
-   }
-
-   if (y == x) {
-      y <- 'NULL'
-   }
-
-   if (z %in% c(x, y)) {
-      z <- 'NULL'
-   }
-
-   vars.non.null   <- unique(c(x, y, z)[c(x, y, z) != 'NULL'])
-   vars.w.non.null <- unique(c(x, y, z, w)[c(x, y, z, w) != 'NULL'])
-
-   # reminder: all data manipulations have to be done before ggplot is called
-
-   data <- data[,vars.w.non.null, drop=FALSE]
-
-   # process weights
-   if (w != 'NULL') {
-      if  (!is.numeric(data[[w]])) {
-         stop('Weight must be numeric')
-      }
-      if  (any(data[[w]]<0)) {
-         stop('Weight must be non-negative')
-      }
-      weight.na <- is.na(data[[w]])
-      if  (any(weight.na)) {
-         warning('Weight is NA for %d instances, deleting', length(which(weight.na)))
-         data <- data[!weight.na,]
-      }
-      # if weights are integer, Hmisc::wtd.quantile() can lead to NA due to overflow
-      data[[w]] <- as.double(data[[w]])
-   }
-
-   # if data size too large, apply sampling
-   data <- sample.data(data, w, opts$max.sample.rows)
-
-   # technicality: if the user has created a factor with 'exclude=FALSE', i.e.
-   # is including NA as a separate level, we have to preserve it in all subsequent
-   # factor(..) transformations.
-   # For simplicity, we assume this is the same for all factors in the data set.
-   # Unfortunately, we have to pass this option down to all functions that internally
-   # manipulate factors.
-
-   exclude.factor <- opts$exclude.factor
-   if (is.null(exclude.factor)) {
-      exclude.factor <- !any(sapply(1:length(data),
-                                    function(x) {is.factor(data[[x]]) && any(is.na(levels(data[[x]])))}))
-      if (exclude.factor) {
-         exclude.factor <- NA
-      }
-   }
-
-   is.num      <- list('NULL'=FALSE)
-   is.ord      <- list('NULL'=FALSE)
-   uniq        <- list('NULL'=0)
-   non.na      <- list('NULL'=FALSE)
-
-   for (n in vars.non.null) {
-      data[[n]] <- preprocess.factors(data, n, w,
-                                      max.factor.levels=opts$max.factor.levels,
-                                      few.unique.as.factor=opts$few.unique.as.factor,
-                                      exclude.factor=exclude.factor)
-      is.num[[n]]      <- is.numeric(data[[n]])
-      is.ord[[n]]      <- is.numeric(data[[n]]) || is.ordered(data[[n]])
-      uniq[[n]]        <- length(unique(data[[n]]))
-   }
-
-   vars.numeric     <- vars.non.null[unlist(is.num[vars.non.null])]
-   vars.non.numeric <- setdiff(vars.non.null, vars.numeric)
-
-   # special case heat map
-   grid.xy <-is.grid.like(data, x, y, z,
-                          min.size=opts$min.size.grid.heat,
-                          min.coverage=opts$min.coverage.heat)
-
-   # order factor levels to best reflect dependent variable
-
-   order.by <- structure(list(x, y, z), names=list(x, y, z))
-
-   if (z != 'NULL' &&
-       (grid.xy ||
-        ((!is.num[[x]]) && (!is.num[[y]])))) {
-      # heat map or spine plot: dependent variable is z
-      order.by[[x]] <- z
-      order.by[[y]] <- z
-   } else {
-      if (is.ord[[y]]) {
-         order.by[[x]] <- y
-      }
-      if (is.ord[[x]]) {
-         order.by[[y]] <- x
-      }
-
-      # if possible, order z by numeric variable, preferably y
-      if (is.ord[[y]]) {
-         order.by[[z]] <- y
-      } else if (is.ord[[x]]) {
-         order.by[[z]] <- x
-      }
-   }
-
-   for (n in vars.non.numeric) {
-      data[[n]] <- factor(data[[n]],
-                          levels=order.factor.value(data, n, order.by[[n]], w, exclude.factor=exclude.factor),
-                          exclude=exclude.factor)
-   }
-
-   vars.covered <- intersect(c(x, y), vars.non.null) # the variables reflected in the plot
-   color.usable <- TRUE  # can we color the plot to reflect additional variables?
-
-   if (grid.xy) {
-      p <- gplt.heat(data, x, y, z, w, ...)
-      type.plot <- 'heat'
-      color.usable <- FALSE
-      vars.covered <- c(x, y, z)
-   } else {
-
-      # for 3D, treat z as factor except for heat map
-      if (is.num[[z]]) {
-         data[[z]] <- quantize(data, z, w=w, max.breaks=opts$discretize.intervals.z)
-         data[[z]] <- factor(data[[z]],
-                             levels=order.factor.value(data, z, order.by[[z]], w,
-                                                       exclude.factor=exclude.factor),
-                             exclude=exclude.factor)
-         is.num[[z]]      <- is.numeric(data[[z]])
-         is.ord[[z]]      <- is.numeric(data[[z]]) || is.ordered(data[[z]])
-         uniq[[z]]        <- length(unique(data[[z]]))
-         vars.non.numeric <- unique(c(vars.non.numeric, z))
-         vars.numeric     <- setdiff(vars.non.null, vars.non.numeric)
-      }
-
-      # precompute medians
-      # note: stat_summary(xintercept=..., geom='vline) does not work inside facets; see
-      # https://groups.google.com/forum/#!topic/ggplot2/z_wHIzwSSzM
-
-      if (length(vars.numeric) == 1) {
-         grp.med <- group.center(data, vars.numeric[1], vars.non.numeric, w=w)
-         data <- merge(data, grp.med)
-      }
-
-      # compute joint number of factor combinations, and
-      # and the maximum/median number of instances in them
-      if (length(vars.non.numeric) > 0) {
-         t <- table(data[,vars.non.numeric], exclude=exclude.factor)
-         num.level   <- length(t)
-         n.med.level <- median(t)
-         n.max.level <- max(t)
+   vars.non.numeric <- cond
+   vars.numeric <- NULL
+   for (v in c(response, indep)) {
+      if (!is.numeric(data[[v]])) {
+         vars.non.numeric <- c(vars.non.numeric, v)
       } else {
-         num.level <- 1
-         n.med.level <- nrow(data)
-         n.max.level <- nrow(data)
+         vars.numeric <- c(vars.numeric, v)
+      }
+   }
+
+   # compute joint number of factor combinations, and
+   # the maximum/median number of instances in them
+   if (length(vars.non.numeric) > 0) {
+      t <- table(data[,vars.non.numeric], useNA='ifany')
+      num.groups   <- length(t)
+      med.points.per.group <- median(t)
+      n.max.level <- max(t)
+   } else {
+      num.groups <- 1
+      med.points.per.group <- nrow(data)
+      n.max.level <- nrow(data)
+   }
+
+   # precompute medians
+   if (length(vars.numeric) == 1) {
+      grp.med <- group.central(data, vars.numeric, vars.non.numeric, w=weights, method='median')
+      data <- merge(data, grp.med)
+   }
+
+   # note: factor levels cannot be limited before ordering is known!
+
+   # determine type of plot
+   if (length(indep) == 0) {
+      # distribution plot
+      res <- determine.plot.type.0(data, response, weights,
+                                   med.points.per.group, num.groups, opts, ...)
+   } else if (length(indep) == 1) {
+      res <- determine.plot.type.1(data, response, indep, cond, weights,
+                                   med.points.per.group, opts, ...)
+   } else { # length(indep) == 2
+      res <- determine.plot.type.2(data, response, indep[[1]], indep[[2]],
+                                   weights, opts, ...)
+   }
+
+   p <- res[[1]]
+   type.plot <- res[[2]]
+
+   if (length(indep) < 2) {
+      p <- add.conditional.layer(p, data, response, indep, cond, type.plot, opts)
+   }
+   p <- p + theme(panel.background=element_blank(), # get rid of gray background
+               strip.background=element_blank(), # no background for facet labels
+               axis.line.x=element_line(),
+               axis.line.y=element_line(),
+               panel.grid=element_line(color='black'))
+   p
+}
+
+determine.plot.type.0 <- function(data, response, w, med.points.per.group,
+                                  num.groups, opts,
+                                  ...) {
+   p <- NULL
+   type.plot <- NULL
+   if (is.numeric(data[[response]])) {
+      opts.geom <- match.arg(opts$geom, c('density', 'histogram', 'scatter', 'auto'))
+      if (opts.geom == 'auto') {
+         # enough points for density plot?
+         opts.geom <- ifelse(med.points.per.group > opts$min.points.density, 'density', 'scatter')
       }
 
-      # determine type of plot
-
-      if (is.num[[x]] && is.num[[y]]) {
-         if (nrow(data) >= opts$min.points.hex) {
-            type.plot <- 'hex'
-            color.usable <- FALSE
-            p <- gplt.hex(data, x, y, w, trans.log.thresh=opts$trans.log.thresh,
-                          alpha=opts$alpha.default, ...)
-         } else {
-            type.plot <- 'scatter.num.num'
-            p <- gplt.scatter(data, x, y, w,
-                              convert.duplicates.to.weights=opts$convert.duplicates.to.weights,
-                              min.points.jitter=opts$min.points.jitter,
-                              w.jitter=opts$width.jitter,
-                              h.jitter=opts$height.jitter,
-                              trans.log.thresh=opts$trans.log.thresh,
-                              ...)
-         }
-      } else if (is.num[[x]] && (!is.num[[y]])) {
-
-         if (n.med.level > opts$min.points.density) {
-            type.plot <- 'density'
-            vars.covered <- x
-            if (opts$use.geom.density) {
-               p <- gplt.density(data, x, w=w,
-                                 trans.log.thresh=opts$trans.log.thresh,
-                                 alpha=opts$alpha.default, ...)
-            } else {
-               p <- gplt.histogram(data, x, w=w,
-                                   n.breaks=opts$n.breaks.histogram,
-                                   trans.log.thresh=opts$trans.log.thresh,
-                                   alpha=opts$alpha.default, ...)
-            }
-         } else {
-            # not enough points for density plot
-            type.plot <- 'scatter.num.fact'
-
-            # for line plots, make up a constant y coordinate
-            ylab <- y
-            if (y == 'NULL') {
-               y <- '.y_const'
-               data[[y]] <- 1
-               data[[y]] <- as.factor(data[[y]])
-               ylab <- ''
-               is.num[[y]] <- FALSE
-               color.usable <- FALSE
-            }
-            # HACK: ggplot2 does not implement vertical dodging, therefore we
-            # use coord_flip() as a workaround; see code for gplt.scatter
-
-            p <- gplt.scatter(data, y, x, w,
-                              convert.duplicates.to.weights=opts$convert.duplicates.to.weights,
-                              min.points.jitter=opts$min.points.jitter,
-                              trans.log.thresh=opts$trans.log.thresh,
-                              xlab=ylab,
-                              ...)
-
-            if (y == '.y_const') {
-               p <- p + theme(axis.ticks.y=element_blank(),
-                              axis.text.y=element_blank())
-            }
-            # the panel properties do not flip accordingly
-            p <- p + coord_flip() + theme_panel_num_x + theme_panel_fac_y
-         }
-      } else if ((!is.num[[x]]) && y == 'NULL') {
-         type.plot <- 'bar'
-         color.usable <- FALSE
-         vars.covered <- x
-         is.num[[y]] <- TRUE
-
-         p <- gplt.bar(data, x, w, alpha=opts$alpha.default, ...)
-      } else if ((!is.num[[x]]) && is.num[[y]]) {
-         if (n.med.level > opts$min.points.box) {
-            type.plot <- 'box'
-
-            # if there are too many violin plots in a horizontal row, they
-            # just look like black lines
-            use.geom.violin <- opts$use.geom.violin
-            if (use.geom.violin && num.level > opts$max.levels.violin) {
-               use.geom.violin <- FALSE
-            }
-            if (use.geom.violin) {
-               p <- gplt.violin(data, x, y, w=w,
-                                trans.log.thresh=opts$trans.log.thresh,
-                                alpha=opts$alpha.default, ...)
-            } else {
-               p <- gplt.box(data, x, y, w=w,
+      if (opts.geom == 'density') {
+         type.plot <- 'density'
+         p <- gplt.density(data, response, w=w,
+                           trans.log.thresh=opts$trans.log.thresh,
+                           ...)
+      } else if (opts.geom == 'histogram') {
+         type.plot <- 'histogram'
+         p <- gplt.histogram(data, response, w=w,
+                             n.breaks=opts$n.breaks.histogram,
                              trans.log.thresh=opts$trans.log.thresh,
-                             alpha=opts$alpha.default, ...)
-            }
-         } else if (n.max.level > 1) {
-            type.plot <- 'scatter.fact.num'
-            p <- gplt.scatter(data, x, y, w=w,
-                              convert.duplicates.to.weights=opts$convert.duplicates.to.weights,
+                             ...)
+      } else { # opts.geom == 'scatter'
+
+         # to plot a distribtion as a line plots,
+         # make up a constant y coordinate
+         indep <- '.y_const'
+         data[[indep]] <- 1
+         data[[indep]] <- as.factor(data[[indep]])
+         type.plot <- 'scatter.num.1'
+         if (!opts$prefer.factors.vert) {
+            p <- gplt.scatter(data, indep, response, w=w,
+                              scatter.dedupe=opts$scatter.dedupe,
                               min.points.jitter=opts$min.points.jitter,
                               trans.log.thresh=opts$trans.log.thresh,
-                              ...)
+                              max.factor.levels=opts$max.factor.levels,
+                              ...) +
+               theme(axis.ticks.x=element_blank(),
+                     axis.text.x=element_blank()) +
+               xlab('')
+            # known issue: the conditioning layer can add theme_slanted_text_x,
+            # in which case spurious '1's appear on the x-axis.
          } else {
-            # special case: single point each - use bar plot
-            type.plot <- 'bar'
-            color.usable <- TRUE
-            vars.covered <- c(x, y)
-            p <- gplt.bar.identity(data, x=x, y=y, w=w, alpha=opts$alpha.default, ...)
+            p <- gplt.scatter(data, response, indep, w=w,
+                              scatter.dedupe=opts$scatter.dedupe,
+                              min.points.jitter=opts$min.points.jitter,
+                              trans.log.thresh=opts$trans.log.thresh,
+                              max.factor.levels=opts$max.factor.levels,
+                              ...) +
+               theme(axis.ticks.y=element_blank(),
+                     axis.text.y=element_blank()) +
+               xlab('')
          }
-      } else if ((!is.num[[x]]) & (!is.num[[y]])) {
+      }
+   } else { # !is.numeric(data[[response]])
+      opts.geom <- match.arg(opts$geom, c('dot', 'bar', 'auto'))
+      if (opts.geom == 'auto') {
+         opts.geom <- ifelse(num.groups < 6, 'bar', 'dot')
+      }
+      type.plot <- opts.geom
+      p <- gplt.dot(data, response, w=w, vertical=opts$prefer.factors.vert,
+                    max.factor.levels=opts$max.factor.levels, geom=opts.geom, ...)
+   }
+   list(p, type.plot)
+}
+
+determine.plot.type.1 <- function(data, response, indep, cond,
+                                  w, med.points.per.group, opts,
+                                  ...) {
+   p <- NULL
+   type.plot <- NULL
+   if (is.numeric(data[[indep]]) && is.numeric(data[[response]])) {
+      opts.geom <- match.arg(opts$geom, c('hex', 'scatter', 'auto'))
+      if (opts.geom == 'auto') {
+         # if a lot of points, choose hex
+         opts.geom <- ifelse(nrow(data) >= opts$min.points.hex, 'hex', 'scatter')
+      }
+      # HACK: the smoothing line can only be colored with a default color if it
+      # wouldn't be used to distinguish multiple groups.
+      fill.smooth <- ifelse(length(cond) == 0, opts$fill.default, 'NULL')
+      if (opts.geom == 'hex') {
+         type.plot <- 'hex'
+         p <- gplt.hex(data, indep, response, w=w, trans.log.thresh=opts$trans.log.thresh,
+                       # hex plot already has color, make the smoothing line neutral
+                       fill.smooth='grey', ...)
+      } else {
+         type.plot <- 'scatter.num'
+         p <- gplt.scatter(data, indep, response, w,
+                           scatter.dedupe=opts$scatter.dedupe,
+                           min.points.jitter=opts$min.points.jitter,
+                           jitter.x=opts$jitter.x,
+                           jitter.y=opts$jitter.y,
+                           trans.log.thresh=opts$trans.log.thresh,
+                           max.factor.levels=opts$max.factor.levels,
+                           fill.smooth=fill.smooth,
+                           ...)
+      }
+   } else if (!is.numeric(data[[indep]]) && !is.numeric(data[[response]])) {
+      opts.geom <- match.arg(opts$geom, c('spine', 'raster', 'auto'))
+
+      if (opts.geom == 'auto') {
+         opts.geom <- ifelse(length(cond) == 0 && # HACK: spine plot cannot be faceted, due to difficulty of implementation
+                                length(levels(data[[response]])) <= opts$max.factor.levels.spine.y &&
+                                length(levels(data[[indep]])) <= opts$max.factor.levels.spine.x, 'spine', 'raster')
+      }
+
+      if (opts.geom == 'spine') {
          type.plot <- 'spine'
-         color.usable <- FALSE
-         if (z == 'NULL') {
-            is.num[[y]] <- TRUE      # display y grid lines
-            p <- gplt.spine(data, x, y, w,
-                            plot.margin.x=opts$spine.plot.margin.x,
-                            exclude.factor=exclude.factor,
-                            alpha=opts$alpha.default, ...)
-            vars.covered <- c(x, y)
-         } else {
-            p <- gplt.spine3(data, x, y, z, w,
-                             plot.margin.x=opts$spine.plot.margin.x,
-                             plot.margin.y=opts$spine.plot.margin.y,
-                             exclude.factor=exclude.factor,
-                             alpha=opts$alpha.default, ...)
-            vars.covered <- c(x, y, z)
-         }
-      }
-   }
-
-   # y, z-coordinate: represent as color or wrap?
-   vars.remaining <- setdiff(vars.non.null, vars.covered)
-
-   color.guides <- TRUE # set to FALSE if guide was redundant
-
-   if (type.plot == 'density') {
-      if (length(vars.remaining) == 0) {
-         # color 1D density plots with default color
-         p <- p + aes(fill='something') +
-            aes(color='something') +
-            scale_fill_manual(values=opts$fill.default) +
-            scale_color_manual(values=opts$fill.default)
-         color.guides <- FALSE
+         p <- gplt.spine(data, indep, response, w=w,
+                         plot.margin.x=opts$spine.plot.margin.x,
+                         max.factor.levels=opts$max.factor.levels.spine.x,
+                         colors.gradient=opts$colors.gradient,
+                         palette.brewer.seq=opts$palette.brewer.seq,
+                         palette.brewer.qual=opts$palette.brewer.qual,
+                         ...)
       } else {
-         # might be overwritten in 1734, but no harm in coloring in either case,
-         # even for wrapping
-         p <- p + aes_string(fill=y) +
-            aes_string(color=y)
-         color.guides <- FALSE
+         type.plot <- 'raster'
+         p <- gplt.raster(data, indep, response, z='NULL', w=w,
+                          trans.log.thresh=opts$trans.log.thresh,
+                          max.factor.levels=opts$max.factor.levels,
+                          raster.resolution=opts$raster.resolution,
+                          colors.gradient=opts$color.gradient,
+                          palette.brewer.seq=opts$palette.brewer.seq,
+                          palette.brewer.qual=opts$palette.brewer.qual,
+                          ...)
+      }
+   } else {
+      # mixed types: one factor, one numeric
+      # assignment of variables to axes depends only on opts$prefer.factors.vert
+
+      opts.geom <- match.arg(opts$geom, c('violin', 'box', 'scatter', 'auto'))
+
+      var.fac <- response
+      var.num <- indep
+      switch <- is.numeric(data[[response]]) != opts$prefer.factors.vert
+      if (switch) {
+         var.num <- response
+         var.fac <- indep
+      }
+      if (opts.geom == 'auto') {
+         # if there are too many violin plots in a horizontal row, they
+         # just look like black lines
+         opts.geom <- ifelse(med.points.per.group > opts$min.points.box,
+                             ifelse(length(levels(var.fac)) <= opts$max.factor.levels.violin, 'violin', 'box'),
+                             'scatter')
+      }
+
+      if (opts.geom == 'violin') {
+         type.plot <- 'violin'
+         p <- gplt.violin(data, var.fac, var.num, w=w,
+                          trans.log.thresh=opts$trans.log.thresh,
+                          max.factor.levels=opts$max.factor.levels,
+                          ...)
+      } else if (opts.geom == 'box') {
+         type.plot <- 'box'
+         p <- gplt.box(data, var.fac, var.num, w=w,
+                       trans.log.thresh=opts$trans.log.thresh,
+                       max.factor.levels=opts$max.factor.levels,
+                       ...)
+      } else { # opts.geom == 'scatter'
+         # not enough points for violin or box plot
+         type.plot <- 'scatter.mixed'
+         p <- gplt.scatter(data, var.fac, var.num, w=w,
+                           scatter.dedupe=opts$scatter.dedupe,
+                           min.points.jitter=opts$min.points.jitter,
+                           trans.log.thresh=opts$trans.log.thresh,
+                           max.factor.levels=opts$max.factor.levels,
+                           ...)
       }
    }
+   list(p, type.plot)
+}
 
-   if (type.plot %in% c('box', 'bar', 'scatter.fact.num')) {
-      p <- p + aes_string(fill=x) +
-         aes_string(color=x)
-      color.guides <- FALSE
+determine.plot.type.2 <- function(data, response, indep1, indep2, w, opts,
+                                  ...) {
+   p <- NULL
+   type.plot <- NULL
+   opts.geom <- match.arg(opts$geom, c('spine', 'raster', 'auto'))
+   if (opts.geom == 'auto') {
+
+      opts.geom <- ifelse((!is.numeric(data[[response]])) && (!is.numeric(data[[indep1]])) &&
+                             (!is.numeric(data[[indep2]])) &&
+                             length(levels(data[[response]])) <= opts$max.factor.levels.spine.z &&
+                             length(levels(data[[indep2]])) <= opts$max.factor.levels.spine.y &&
+                             length(levels(data[[indep1]])) <= opts$max.factor.levels.spine.x, 'spine', 'raster')
    }
 
-   if (color.usable && type.plot == 'scatter.num.fact') {
-      p <- p + aes_string(fill=y) +
-         aes_string(color=y)
-      color.guides <- FALSE
+   if (opts.geom == 'spine') {
+      type.plot <- 'spine3'
+      p <- gplt.spine3(data, indep1, indep2, response, w=w,
+                       plot.margin.x=opts$spine.plot.margin.x,
+                       plot.margin.y=opts$spine.plot.margin.y,
+                       max.factor.levels=opts$max.factor.levels.spine.x,
+                       colors.gradient=opts$color.gradient,
+                       palette.brewer.seq=opts$palette.brewer.seq,
+                       palette.brewer.qual=opts$palette.brewer.qual,
+                       ...)
+   } else {
+      type.plot <- 'raster3'
+      p <- gplt.raster(data, indep1, indep2, response, w=w,
+                       trans.log.thresh=opts$trans.log.thresh,
+                       max.factor.levels=opts$max.factor.levels,
+                       raster.resolution=opts$raster.resolution,
+                       colors.gradient=opts$colors.gradient,
+                       palette.brewer.seq=opts$palette.brewer.seq,
+                       palette.brewer.qual=opts$palette.brewer.qual,
+                       ...)
+   }
+   list(p, type.plot)
+}
+
+
+# format factor levels with the first or last value replaced by <var>=<val>
+# this helps save space on the grid display
+format.facets <- function(data, x, show.var='first') {
+   lev <- NULL
+   if (is.numeric(data[[x]])) {
+      lev <- as.character(sort(unique(data[[x]])))
+   } else {
+      lev <- levels(data[[x]])
+   }
+   names(lev) <- lev
+   idx <- ifelse(show.var == 'first', 1, length(lev))
+   lev[idx] <- sprintf('%s = %s', x, lev[idx])
+   lev
+}
+
+add.facet.wrap <- function(p, data, cond, preferred.order, opts) {
+   nrow <- NULL
+   ncol <- NULL
+   switch <- NULL
+   show.var <- 'first'
+   if (preferred.order == 'row') {
+      ncol <- opts$facet.max.cols
+      switch <- 'x'
+   } else if (preferred.order == 'col') {
+      nrow <- opts$facet.max.rows
+      switch <- 'y'
+      show.var <- 'last'
+   }
+   facet.labels <- format.facets(data, cond, show.var)
+
+   p <- p + theme_slanted_text_x +  # axis text might overlap in small diagrams
+      facet_wrap(cond,
+                 labeller=as_labeller(facet.labels),
+                 nrow=nrow, ncol=ncol, switch=switch) +
+      theme(panel.border=element_rect(fill=NA))
+   # known issue 1: always slanting text is not ideal, but no quick fix
+   # known issue 2: for it would be good to order vertical facets like axis
+   # (i.e., the lowest value at the bottom), but doesn't seem to be easy to configure.
+}
+
+
+add.facet.grid <- function(p, data, cond) {
+   facet.labels.1 <- format.facets(data, cond[1], 'first')
+   facet.labels.2 <- format.facets(data, cond[2], 'first')
+
+   p + theme_slanted_text_x + # axis text can easily overlap in small diagrams
+      facet_grid(sprintf('%s~%s', cond[1], cond[2]),
+                 labeller=labeller(.rows=as_labeller(facet.labels.1),
+                                   .cols=as_labeller(facet.labels.2))) +
+      theme(panel.border=element_rect(fill=NA))
+}
+
+
+# when we get here, color will not be used for further distinction;
+# no harm in using previous factor for (redundant) coloring
+redundant.factor.color <- function(p, data, response, indep, type.plot, opts) {
+   if (type.plot %in% c('spine', 'spine3', 'hex')) {
+      # these types are already colored
+      return(p)
+   }
+   fac <- NULL
+   if (!is.numeric(data[[response]])) {
+      fac <- response
+   } else if  (length(indep) > 0 && !is.numeric(data[[indep]])) {
+      fac <- indep
+   }
+   if (!is.null(fac)) {
+      p <- add.color.fill(p, data, fac,
+                          colors.gradient=opts$colors.gradient,
+                          palette.brewer.seq=opts$palette.brewer.seq,
+                          palette.brewer.qual=opts$palette.brewer.qual)  +
+         guides(fill=FALSE, color=FALSE)
+
+      return (p)
+   } else if (type.plot %in% c('density', 'histogram')) {
+      # color 1D density plots with default color
+      p + aes(fill='something') +
+         aes(color='something') +
+         scale_fill_manual(values=opts$fill.default) +
+         scale_color_manual(values=opts$fill.default) +
+         guides(fill=FALSE, color=FALSE)
+   } else {
+      p
+   }
+}
+
+# represent conditional variables either by color or facets
+add.conditional.layer <- function(p, data, response, indep, cond, type.plot, opts) {
+
+   if (length(cond) == 0) {
+      return(redundant.factor.color(p, data, response, indep, type.plot, opts))
    }
 
-   color.used <- FALSE
-
-   if (length(vars.remaining) > 0) {
-
-      var.next <- vars.remaining[1]
-
-      # try to use color to express the remaining variables
-
-      if (color.usable) {
-
-         u <- uniq[[var.next]]
-
-         if (type.plot == 'scatter.num.num' && u <= opts$max.colors.scatter) {
-            p <- p + aes_string(color=var.next)
-            color.used <- TRUE
-         } else if (( type.plot == 'density'          && u <= opts$max.colors.density) ||
-                    (type.plot == 'scatter.num.fact' && u <= opts$max.colors.scatter) ||
-                    (type.plot == 'scatter.fact.num' && u <= opts$max.colors.scatter) ||
-                    (type.plot == 'box'              && u <= opts$max.colors.box) ||
-                    (type.plot == 'bar'              && u <= opts$max.colors.bar)) {
-            p <- p + aes_string(fill=var.next) + aes_string(color=var.next)
-            color.used <- TRUE
-         }
-      }
-   }
-
-   if (color.used == TRUE) {
-      vars.remaining <- vars.remaining[-1]
-   } else if (!color.guides) {
-      p <- p + guides(fill=FALSE, color=FALSE)
-   }
-
+   # heuristic for facet layout
    preferred.order <- 'none'
-
-   if (type.plot == 'density' ||
-       type.plot == 'scatter.num.fact') {
+   if (type.plot %in% c('density', 'histogram')) {
       preferred.order <- 'col'
-   }
-   if (type.plot == 'box' ||
-       type.plot == 'bar' ||
-       type.plot == 'scatter.fact.num') {
-      preferred.order <- 'row'
+   } else if (!(type.plot %in% c('hex', 'scatter.num', 'raster'))) { # pure numeric -> no preference
+      # mixed num/factor -> opposite to graph layout
+      preferred.order <- ifelse(opts$prefer.factors.vert, 'row', 'col')
    }
 
-   # faceting: when using facets we have no space to spare, we
-   # save the margin label by showing the first/last value as
-   # <var> = <val>
+   if (length(cond) == 1) {
+      u <- length(unique(data[[cond]]))
 
-   # the remaining variables will be faceted
-   if (length(vars.remaining) == 2) {
-      # example: plotluck(diamonds, price, cut,clarity)
-      facet.labels.1 <- format.facets(data, vars.remaining[1])
-      facet.labels.2 <- format.facets(data, vars.remaining[2])
-      p <- p + theme_slanted_text_x # axis text can easily overlap in small diagrams
-      p <- p + facet_grid(
-         sprintf('%s~%s', vars.remaining[1], vars.remaining[2]),
-         labeller=labeller(.rows=as_labeller(facet.labels.1), .cols=as_labeller(facet.labels.2)))
-   } else if (length(vars.remaining) == 1) {
+      if (u <= opts$max.color.factors && !(type.plot %in% c('spine', 'raster', 'hex'))) {
+         p <- add.color.fill(p, data, cond,
+                             colors.gradient=opts$colors.gradient,
+                             palette.brewer.seq=opts$palette.brewer.seq,
+                             palette.brewer.qual=opts$palette.brewer.qual)
 
-      ncol <- NULL
-      nrow <- NULL
-      switch <- NULL
-      facet.labels <- format.facets(data, vars.remaining[1])
-      if (preferred.order == 'col') {
-         facet.labels <- format.facets(data, vars.remaining[1], show.var='last')
-         nrow <- opts$max.facets.row
-         switch <- 'y'
-      } else  if (preferred.order == 'row') {
-         p <- p + theme_slanted_text_x  # axis text can easily overlap in small diagrams
-         ncol <- opts$max.facets.column
-         switch <- 'x'
-      }
-      p <- p + facet_wrap(vars.remaining[1],
-                          labeller=as_labeller(facet.labels),
-                          nrow=nrow, ncol=ncol, switch = switch)
-   }
+         aesth.legend <- ifelse(type.plot %in% c('density', 'histogram', 'bar'), 'fill', 'color')
+         p <- add.color.legend(p, data, cond, aesth.legend)
 
-   p + theme(panel.background=element_blank(), # get rid of gray background
-             strip.background = element_blank(), # no background for facet labels
-             axis.line.x=element_line(),
-             axis.line.y=element_line(),
-             panel.grid=element_line(color='black'),
-             legend.position='bottom', # use maximum area for actual plot
-             legend.text=element_text(angle=-45), # avoid overlapping tick text
-             legend.text.align=0) # use instead of hjust/vjust (these are not doing anything above))
-}
-
-# return a list of conditional entropies H(target|x), for each column in the data frame
-# for comparability, all variables are quantized into the same number of bins
-cond.entropy.data <- function(data, target, w='NULL', exclude.factor=NA) {
-   n.row <- nrow(data)
-   n.levels <- floor(max(2, min(log2(n.row), n.row/10))) # heuristic
-   data[[target]] <- quantize(data, target, y='NULL', w=w,
-                              max.breaks=n.levels, keep.breaks=n.levels, exclude.factor=exclude.factor);
-
-   cond.entropy.quantized <- function(data, x, y, w, n.levels, exclude.factor) {
-      if (x == y) {
-         0
       } else {
-         x.data <- quantize(data, x, y, max.breaks=n.levels, keep.breaks=n.levels, exclude.factor=exclude.factor);
-         # note: we need to make a copy for the special case of x=w
-         cond.entropy(cbind(data, .x=x.data), '.x', y, w, exclude.factor=exclude.factor)
+         p <- redundant.factor.color(p, data, response, indep, type.plot, opts)
+         add.facet.wrap(p, data, cond, preferred.order, opts)
       }
+   } else { #length(cond) == 2
+      #u1 <- length(unique(data[[cond[1]]]))
+      #u2 <- length(unique(data[[cond[2]]]))
+      # if (min(u1,u2) <= opts$max.color.factors) {
+      #    if (u1 < u2) {
+      #       p + aes_string(fill=cond[1]) + aes_string(color=cond[1]) +
+      #          add.facet.wrap(p, data, cond[2], preferred.order, opts)
+      #    } else {
+      #       p + aes_string(fill=cond[2]) + aes_string(color=cond[2]) +
+      #          add.facet.wrap(p, data, cond[1], preferred.order, opts)
+      #    }
+      # } else {
+      # example: plotluck(price~1|cut+clarity, diamonds)
+      p <- redundant.factor.color(p, data, response, indep, type.plot, opts)
+      add.facet.grid(p, data, cond)
+      #}
    }
-
-   sapply(names(data), function(x) cond.entropy.quantized(data=data,
-                                                          x=x, y=target, w=w, n.levels=n.levels, exclude.factor=exclude.factor))
 }
 
+
+# plot multiple graphs in a grid layout, possibly over multiple pages
+# suppress.*lab == 'all': no axis labels for this dimension
+# suppress.*lab == 'margin' means:
+# no x-axis labels except at the bottom;
+# no y-axis labels except in the leftmost plots
+mplot <- function(plots, rows=ceiling(sqrt(length(plots))),
+                  cols=ceiling(sqrt(length(plots))),
+                  suppress.xlab=FALSE, suppress.ylab=FALSE) {
+
+   num.plots <- length(plots)
+   if (cols > num.plots) {
+      cols <- num.plots
+      rows <- 1
+   }
+
+   size.page <- rows * cols
+
+   layout <- matrix(seq( size.page),
+                    ncol=cols, nrow=rows, byrow=TRUE)
+
+   for (p in 1:ceiling(num.plots/size.page)) {
+
+      grid::grid.newpage()
+      grid::pushViewport(grid::viewport(layout = grid::grid.layout(nrow(layout), ncol(layout))))
+
+      # make each plot, in the correct location
+      for (i in 1:min(size.page, num.plots-(p-1)*size.page)) {
+         # get the i,j matrix positions of the regions that contain this subplot
+         matchidx <- as.data.frame(which(layout==i, arr.ind=TRUE))
+         plot.idx <- (p-1)*size.page+i
+         plot.current <- plots[[plot.idx]]
+
+         if (suppress.xlab == 'all' ||
+             (suppress.xlab == 'margin' && matchidx$row != rows
+              && plot.idx + cols <= num.plots)) { # last complete row
+
+            # note: the following doesn't work if a coord_flip() was applied:
+            # plot.current <- plot.current + xlab('')
+            # axis labels move with the coordinates, themes don't!
+            plot.current <- plot.current + theme(axis.title.x=element_blank())
+         }
+         if (suppress.ylab == 'all' ||
+             (suppress.ylab == 'margin' && matchidx$col != 1)) {
+            plot.current <- plot.current + theme(axis.title.y=element_blank())
+         }
+
+         # do not fail if a single subplot isn't well-defined
+         tryCatch(
+            print(plot.current, vp = grid::viewport(layout.pos.row = matchidx$row,
+                                                    layout.pos.col = matchidx$col)),
+            error = function(e) print(gplt.blank(e), vp = grid::viewport(layout.pos.row = matchidx$row,
+                                                                         layout.pos.col = matchidx$col)))
+      }
+   }
+}
 
 #'Create several plots at once with \code{plotluck}
 #'
@@ -1884,7 +2639,6 @@ cond.entropy.data <- function(data, target, w='NULL', exclude.factor=NA) {
 #'  value is not assigned.
 #'
 #'@seealso \code{\link{plotluck}}
-#'@export
 #' @examples
 #' data(iris)
 #' # All 1D distributions
@@ -1899,85 +2653,108 @@ cond.entropy.data <- function(data, target, w='NULL', exclude.factor=NA) {
 #' # All pairs of variables
 #' plotluck.multi(iris, all, all)
 
-plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL,
-                           in.grid=TRUE, entropy.order=TRUE,
+
+plotluck.multi <- function(response, indep, data, w='NULL',
+                           in.grid=TRUE,
                            max.rows=10, max.cols=10,
                            opts=plotluck.options(),
                            ...) {
 
-   x <- deparse(substitute(x))
-   y <- deparse(substitute(y))
-   w <- deparse(substitute(w))
    main <- deparse(substitute(data))
 
-   if ((x == 'all' || x == 'NULL') && y == 'NULL') {
-      # 1D
-      x <- 'all'
-   } else if (x == 'NULL' && y=='all') {
-      # switch
-      x <- 'all'
-      y <- 'NULL'
-   } else if (x != 'NULL' && x != 'all' && y != 'NULL' && y != 'all') {
-      stop('At least one of x or y must be "all"')
-   } else {
-      if (x == 'NULL') {
-         x <- 'all'
-      }
-      if (y == 'NULL') {
-         y <- 'all'
-      }
-   }
-
    # if data size too large, apply sampling here; expensive to repeat
-   data <- sample.data(data, w, opts$max.sample.rows)
+   data <- sample.data(data, w, opts$sample.max.rows)
 
-   # if exactly one variable is specified, order plots by conditional entropy
-   if (entropy.order &&
-          length(which(c(x, y) == 'NULL')) == 0 &&
-          length(which(c(x, y) == 'all')) == 1) {
-      if (y == 'all') {
-         target <- x
-      } else {
-         target <- y
+   vars.x <- NULL
+   vrs.y <- NULL
+   if (response == '.') {
+      vars.y <- names(data)
+      if (length(indep) == 0) {
+         vars.x <- '1'
+      } else if (indep == '.') {
+         vars.x <- names(data)
+      }  else {
+         vars.x <- indep
       }
-      cond.ent <- cond.entropy.data(data, target, w=w)
-      data <- data[,order(cond.ent)]
+   } else { # response != '.'
+      vars.y <- response
+      if(indep != '.') {
+         stop('error: invalid formula')
+      }
+      vars.x <- names(data)
    }
 
-   vars <- list()
-
-   for (n in c('x','y')) {
-      n.val <- get(n)
-      if (n.val == 'all') {
-         vars[[n]] <- names(data)
-      } else {
-         vars[[n]] <- n.val
+   # order variables by conditional entropy
+   cond.ent <- NULL
+   if (opts$multi.entropy.order) {
+      if (length(vars.y) > 1 && length(vars.x) == 1 && vars.x != '1') {
+         cond.ent <- cond.entropy.data(data, given=vars.x, w=w)
+         vars.y <- vars.y[order(cond.ent[,vars.x])]
+      } else if (length(vars.y) == 1 && length(vars.x) > 1) {
+         cond.ent <- cond.entropy.data(data, target=vars.y, w=w)
+         vars.x <- vars.x[order(cond.ent[vars.y,])]
+      } else if (length(vars.y) > 1 && length(vars.x) > 1) {
+         cond.ent <- cond.entropy.data(data, w=w)
+         var.ent <- (apply(cond.ent, 1, mean) + apply(cond.ent, 1, mean))/2
+         vars.x <- vars.x[order(var.ent)]
+         vars.y <- vars.x
       }
    }
 
-   combinations <- expand.grid(vars[['x']], vars[['y']], stringsAsFactors=FALSE)
-   names(combinations) <- c('x','y')
-   if (x != 'NULL') {
-      combinations$xlab <- sprintf(' + xlab("%s")', combinations$x)
-   } else {
-      combinations$xlab <- ''
-   }
-   if (y != 'NULL') {
-      combinations$ylab <- sprintf(' + ylab("%s")', combinations$y)
-   } else {
-      combinations$ylab <- ''
+   combi <- expand.grid(seq(length(vars.x)),
+                               seq(length(vars.y)), stringsAsFactors=FALSE)
+   names(combi) = c('grid.x', 'grid.y')
+   combi$x <- vars.x[combi$grid.x]
+   combi$y <- vars.y[combi$grid.y]
+   combi$fac.x <- sapply(combi$x, function(v) !is.numeric(data[[v]]))
+   combi$fac.y <- sapply(combi$y, function(v) !is.numeric(data[[v]]))
+
+   # For mixed factor/num combinations, plotluck() assigns the axes only
+   # depending on opts$prefer.factors.vert. In the output lattice for
+   # plotluck.multi, we need to control the direction (and show opposites
+   # at mirror position)
+   combi$opts <- 'prefer.factors.vert=TRUE'
+   combi$labs <- ''
+   if (length(vars.x) > 1 && length(vars.y) == 1) {
+      if (is.numeric(data[[vars.y]])) {
+         combi$opts <-
+            'prefer.factors.vert=FALSE'
+      }
+   } else  if (length(vars.x) == 1 && length(vars.y) > 1) {
+      if (!is.numeric(data[[vars.x]])) {
+         combi$opts <-
+            'prefer.factors.vert=FALSE'
+      }
+   } else {  # length(vars.x) > 1 && length(vars.y) > 1
+      below.diag <- combi$grid.x > combi$grid.y
+      combi$opts[below.diag & combi$fac.x] <-
+         'prefer.factors.vert=FALSE'
+      combi$opts[(!below.diag) & (!combi$fac.y)] <-
+         'prefer.factors.vert=FALSE'
+
+      # label the corner elements with the variable name, instead
+      # of 'density' or 'count' (diagonal contains distribution plots)
+      idx.id <- combi$x == combi$y
+      combi$labs[idx.id] <-
+         sprintf('+xlab("%s")+ylab("%s")', combi$x[idx.id],
+                combi$y[idx.id])
    }
 
    # try to make a square layout
-   cols <- ceiling(sqrt(nrow(combinations)))
-   rows <- ceiling(nrow(combinations)/cols)
+   cols <- ceiling(sqrt(nrow(combi)))
+   rows <- ceiling(nrow(combi)/cols)
 
+   # figure out which plots are not at the margins, and
+   # don't show axis labels for them if redundant
    suppress.xlab <- FALSE
    suppress.ylab <- FALSE
 
-   if (!in.grid) {
-      theme.multi <- ''
-   } else {
+   theme.multi <- ''
+
+   is.square <- TRUE
+
+   if (in.grid) {
+
       # grid of small 'sparklines':
       # remove all annotation text
       theme.multi <- " + theme_minimal() +
@@ -1995,40 +2772,40 @@ plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL,
 
       theme.multi <- gsub('\\s','', theme.multi)
 
-      # slow and hardly visible
-      opts$convert.duplicates.to.weights <- FALSE
+      # area scale slow and hardly visible
+      opts$scatter.dedupe <- 'jitter'
 
       # use the limited space to make subgraphs
       # relatively rectangular
-      opts$max.facets.row    <- NULL
-      opts$max.facets.column <- NULL
+      opts$facet.max.rows <- NULL
+      opts$facet.max.cols <- NULL
 
-      # does everything fit on one page?
-      is.square <- TRUE
+      # do all plots fit on a single page?
       if (cols > max.cols || cols > max.rows) {
          is.square <- FALSE
          cols <- max.cols
-         rows <- min(max.rows, ceiling(nrow(combinations) / cols))
+         rows <- min(max.rows, ceiling(nrow(combi)/cols))
       }
-      if (x == 'all' && y == 'all' && is.square) {
-         # if the full cross product fits on one page,
-         # write the axis labels only on the margins
-         suppress.xlab <- 'margin'
-         suppress.ylab <- 'margin'
+
+      if (length(vars.x) > 1 && length(vars.y) > 1 && is.square) {
+          # if the full cross product fits on one page,
+          # write the axis labels only on the margins
+          suppress.xlab <- 'margin'
+          suppress.ylab <- 'margin'
       }
-      if (x != 'all') {
+      if (length(vars.x) == 1) {
          # do not repeat the axis label for the constant dimension
-         if (x != 'NULL') {
-            main <- x
+         if (vars.x != '1') {
+            main <- vars.x
             suppress.xlab <- 'margin'
          }
          else {
             # distribution/density plot
-            suppress.xlab <- 'all'
+            suppress.ylab <- 'all'
          }
       }
-      if (y != 'all') {
-         if (y != 'NULL') {
+      if (length(vars.y) == 1) {
+         if (vars.y != '1') {
             main <- y
             suppress.ylab <- 'margin'
          } else {
@@ -2037,8 +2814,24 @@ plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL,
       }
    }
 
-   call.strs <- sprintf('plotluck(data,x=%s, y=%s, w=%s, opts=opts, ...)%s%s%s',
-      combinations$x, combinations$y, w, combinations$xlab, combinations$ylab, theme.multi)
+   if (length(vars.x) > 1 && length(vars.y) > 1 &&
+       ((!in.grid) || (!is.square))) {
+     # plots with the axis transposed are redundant;
+     # if not part of grid, no need to show them
+     combi <- combi[combi$grid.x >= combi$grid.y,]
+   }
+
+   # plot distributions for x~x
+   combi$x[combi$x == combi$y] <- '1'
+
+   if (w != 'NULL')
+   {
+      call.strs <- sprintf('plotluck(%s~%s, data, w=%s, opts=plotluck.options(opts,%s), ...)%s%s',
+                           combi$y, combi$x, w, combi$opts, combi$labs, theme.multi)
+   } else {
+      call.strs <- sprintf('plotluck(%s~%s, data, opts=plotluck.options(opts,%s), ...)%s%s',
+                           combi$y, combi$x, combi$opts, combi$labs, theme.multi)
+   }
 
    call.str <- sprintf('list(%s)', paste(call.strs, collapse=','))
    structure(list(plots=eval(parse(text=call.str)),
@@ -2051,56 +2844,6 @@ plotluck.multi <- function(data, x=NULL, y=NULL, w=NULL,
              class='plotluck_multi')
 }
 
-# plot multiple graphs in a grid layout, possibly over multiple pages
-mplot <- function(plots, rows=ceiling(sqrt(length(plots))),
-                  cols=ceiling(sqrt(length(plots))),
-                  suppress.xlab=FALSE, suppress.ylab=FALSE) {
-
-   num.plots <- length(plots)
-   if (cols > num.plots) {
-      cols <- num.plots
-      rows <- 1
-   }
-
-   size.page <- rows * cols
-
-   layout <- matrix(seq(1, size.page),
-               ncol=cols, nrow=rows, byrow=TRUE)
-
-   for (p in 1:ceiling(num.plots/size.page)) {
-
-      grid::grid.newpage()
-      grid::pushViewport(grid::viewport(layout = grid::grid.layout(nrow(layout), ncol(layout))))
-
-      # Make each plot, in the correct location
-      for (i in 1:min(size.page, num.plots-(p-1)*size.page)) {
-         # Get the i,j matrix positions of the regions that contain this subplot
-         matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
-         plot.idx <- (p-1)*size.page+i
-         plot.current <- plots[[plot.idx]]
-
-         # suppress.*lab == 'margin' means:
-         # no x-axis labels except at the bottom;
-         # no y-axis labels except in the leftmost plots
-         if (suppress.xlab == 'all' ||
-             (suppress.xlab == 'margin' && matchidx$row != rows
-              && plot.idx + cols <= num.plots)) { # last complete row
-            plot.current <- plot.current + xlab(NULL)
-         }
-         if (suppress.ylab == 'all' ||
-             (suppress.ylab == 'margin' && matchidx$col != 1)) {
-            plot.current <- plot.current + ylab(NULL)
-         }
-
-         # do not fail if a single subplot isn't well-defined
-         tryCatch(
-            print(plot.current, vp = grid::viewport(layout.pos.row = matchidx$row,
-                                            layout.pos.col = matchidx$col)),
-            error = function(e) print(gplt.blank(e), vp = grid::viewport(layout.pos.row = matchidx$row,
-                                                                layout.pos.col = matchidx$col)))
-      }
-   }
-}
 
 # auxiliary class to achieve consistent behavior of plotluck.multi with ggplot
 # and plotluck: draw the plot if an only if the return value is not assigned.
@@ -2114,3 +2857,86 @@ print.plotluck_multi <- function(x, ...) {
    }
 }
 
+
+#'Plot a dataset with \code{plotluck} for a randomly generated formula
+#'
+#'@param data a data frame
+#'@param ... additional parameters to be passed to \code{plotluck}, such as
+#'       \code{weights} and \code{opts}.
+#'@return a ggplot2 object.
+#'
+#'  \code{sample.plotluck} samples the formula by (1) uniformly drawing the
+#'  number of variables (1-3) and then, for each variable, (2) uniformly
+#'  choosing one of the existing types (numeric, ordered or unordered factor),
+#'  and (3) uniformly selecting one of the columns of that type.
+#'
+#'@seealso \code{\link{plotluck}}
+#'@export
+#'@examples
+#'set.seed(42)
+#' data(iris)
+#' sample.plotluck(iris)
+sample.plotluck <- function(data, ...) {
+   idx.ord <- which(sapply(data, is.ordered))
+   idx.fac <- which(sapply(data, function(x) {is.factor(x) && (!is.ordered(x))}))
+   idx.num <- setdiff(setdiff(seq(length(data)),idx.fac), idx.ord)
+   w <- match.call()$weights
+   if (!is.null(w)) {
+      idx.w <- which(names(data) == w)
+      idx.num <- setdiff(idx.num, idx.w)
+   }
+
+   types <- list()
+   if (length(idx.fac) > 0) {
+      types[[length(types)+1]] <- idx.fac
+   }
+   if (length(idx.ord) > 0) {
+      types[[length(types)+1]] <- idx.ord
+   }
+   if (length(idx.num) > 0) {
+      types[[length(types)+1]] <- idx.num
+   }
+   form.length <- sample(c(1,2,3),1)
+   cond.pos <- sample(seq(form.length), 1) + 0.5
+   form <- NULL
+   op <- NULL
+   for (pos in seq(form.length)) {
+      form <- c(form, op)
+      if (pos > cond.pos) {
+         cond.pos <- 1000
+         op <- '|'
+         if (pos == 1) {
+            form <- c(form, '~', '1')
+         }
+      } else if (pos == 1) {
+         op <- '~'
+      } else {
+         op <- '+'
+      }
+      while (TRUE) {
+         var.type <- sample(seq(length(types)), 1)
+         var <- sample(seq(length(types[[var.type]])),1)
+         var <- names(data)[(types[[var.type]][var])]
+         if (!(var %in% form)) {
+            # avoid duplication of variables
+            break
+         }
+      }
+      form <- c(form, var)
+   }
+   if (length(form) == 1) {
+      form <- c(form, '~', '1')
+   }
+   form <-do.call(paste, as.list(form))
+
+   # collect extra arguments
+   arg <- sapply(match.call()[seq(2,length(match.call()))], deparse)
+   s <- list()
+   for (i in seq(length(arg))) {
+      s[[length(s)+1]] <- sprintf('%s = %s', names(arg)[i], arg[i])
+   }
+   s <- do.call(paste,c(s,sep=', '))
+   s <- sprintf('plotluck(%s, %s)', form, s)
+   print(s)
+   plotluck(as.formula(form), data, ...) + labs(title=s)
+}

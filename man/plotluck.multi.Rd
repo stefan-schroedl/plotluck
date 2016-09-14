@@ -4,20 +4,15 @@
 \alias{plotluck.multi}
 \title{Create several plots at once with \code{plotluck}}
 \usage{
-plotluck.multi(data, x = NULL, y = NULL, w = NULL, in.grid = TRUE,
-  entropy.order = TRUE, max.rows = 10, max.cols = 10,
-  opts = plotluck.options(), ...)
+plotluck.multi(response, indep, data, w = "NULL", in.grid = TRUE,
+  max.rows = 10, max.cols = 10, opts = plotluck.options(), ...)
 }
 \arguments{
 \item{data}{a data frame}
 
-\item{x, y}{column names, or \code{all}}
-
 \item{w}{weight column (optional)}
 
 \item{in.grid}{flag whether a grid of plots should be produced}
-
-\item{entropy.order}{order dependency plots by conditional entropy}
 
 \item{max.cols, max.rows}{maximum number of plots to put on one page. If
 necessary, multiple pages are generated.}
@@ -25,6 +20,10 @@ necessary, multiple pages are generated.}
 \item{opts}{a named list of \code{plotluck} options (optional)}
 
 \item{...}{additional parameters to be passed to \code{plotluck}}
+
+\item{x, y}{column names, or \code{all}}
+
+\item{entropy.order}{order dependency plots by conditional entropy}
 }
 \value{
 an object of class plotluck_multi.

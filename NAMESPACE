@@ -2,8 +2,8 @@
 
 S3method(print,plotluck_multi)
 export(plotluck)
-export(plotluck.multi)
 export(plotluck.options)
+export(sample.plotluck)
 import(ggplot2)
 importFrom(plyr,.)
 importFrom(plyr,ddply)
