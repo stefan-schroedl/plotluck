@@ -38,7 +38,7 @@ if (exists('.debug') && .debug) {
 
 # load data
 data(iris)
-if (!requireNamespace('ggplot2movies', quietly = TRUE)) {
+if (!requireNamespace('ggplot2movies', quietly=TRUE)) {
    install.packages('ggplot2movies')
 }
 data(movies, package='ggplot2movies')
@@ -70,8 +70,8 @@ test_that_ref("1d_scaling", "log scaling", {
    set.seed(0)
    n <- 1000
    m <- 100
-   df <- data.frame(a=rnorm(n, mean = m, sd = 5),
-                    b=c(10*m, rnorm(n-1, mean = m, sd = 5)),
+   df <- data.frame(a=rnorm(n, mean=m, sd=5),
+                    b=c(10*m, rnorm(n-1, mean=m, sd=5)),
                     c=m*c(-2*m, rexp(n-1, 1)),
                     d=-m*rexp(n, 1))
    eq_ref(plotluck(a~1, df))
@@ -82,7 +82,7 @@ test_that_ref("1d_scaling", "log scaling", {
 
 
 test_that_ref("2d_scatter", "2D scatter", {
-   eq_ref(plotluck(iris, Petal.Length, Petal.Width))
+   eq_ref(plotluck(Petal.Length~Petal.Width, iris))
 
    # hex
    # note: when running devtools::check(), weird dependency problem with mgce,
@@ -91,11 +91,11 @@ test_that_ref("2d_scatter", "2D scatter", {
 
    # scatter
    eq_ref(plotluck(rating~votes, movies,
-                  opts=plotluck.options(min.points.hex = 1E20)))
+                  opts=plotluck.options(min.points.hex=1E20)))
 
    # scatter, no log scaling
    eq_ref(plotluck(rating~votes, movies,
-                   opts=plotluck.options(min.points.hex = 1E20, trans.log.thresh = 100)))
+                   opts=plotluck.options(min.points.hex=1E20, trans.log.thresh=100)))
 })
 
 
@@ -108,7 +108,7 @@ test_that_ref("2d_density", "2D density", {
 
    # scatter
    eq_ref(plotluck(Petal.Length~Species, iris,
-                   opts=plotluck.options(min.points.box = 1E20)))
+                   opts=plotluck.options(min.points.violin=1E20)))
    # ordering
    i2 <- iris
    i2$Species <- as.ordered(i2$Species)
@@ -119,16 +119,16 @@ test_that_ref("2d_density", "2D density", {
 
 
 test_that_ref("2d_box", "2D box/violin plot", {
-   eq_ref(plotluck(movies, mpaa, rating))
+   eq_ref(plotluck(rating~mpaa, movies))
 
    # box instead of violin
    eq_ref(plotluck(rating~mpaa, movies, opts=plotluck.options(geom='box')))
 
    # as scatter plot
-   eq_ref(plotluck(rating~mpaa, movies, opts=plotluck.options(min.points.box = 1E20)))
+   eq_ref(plotluck(rating~mpaa, movies, opts=plotluck.options(min.points.violin=1E20)))
 
    # with jittering
-   eq_ref(plotluck(rating~mpaa, movies, opts=plotluck.options(min.points.box = 1E20, scatter.dedupe='jitter')))
+   eq_ref(plotluck(rating~mpaa, movies, opts=plotluck.options(min.points.violin=1E20, scatter.dedupe='jitter')))
 
    # implicit conversion of binary variables
    eq_ref(plotluck(budget~Documentary, movies))
@@ -159,7 +159,7 @@ test_that_ref("3d_identity", "3D identity", {
                     f2=factor(c(1,1,2,2)), val=c(5,6,2,8))
    eq_ref(plotluck(val~f|f2, df))
 
-   eq_ref(plotluck(val~f|f2, df, opts=plotluck.options(max.color.factors=0)))
+   eq_ref(plotluck(val~f|f2, df, opts=plotluck.options(max.factor.levels.color=0)))
 })
 
 test_that_ref("3d_heat", "3D heat", {
@@ -178,7 +178,7 @@ test_that_ref("3d_scatter", "3D scatter", {
 
    # using scatter, facets
    eq_ref(plotluck( rating~length|mpaa, movies,
-                   opts=plotluck.options(min.points.hex = 1E20)))
+                   opts=plotluck.options(min.points.hex=1E20)))
 
    # using colors
    eq_ref(plotluck(Petal.Width~Petal.Length|Species, iris))
@@ -192,11 +192,11 @@ test_that_ref("3d_density", "3D density", {
 
    # scatter, facets
    eq_ref(plotluck(price~1|cut+color, diamonds,
-                   opts=plotluck.options(min.points.density = 1E20)))
+                   opts=plotluck.options(min.points.density=1E20)))
 
    # colors
    eq_ref(plotluck(price~1|cut, diamonds,
-                   opts=plotluck.options(max.color.factors = 1E20)))
+                   opts=plotluck.options(max.factor.levels.color=1E20)))
 })
 
 
@@ -207,19 +207,19 @@ test_that_ref("3d_violin", "3D violin", {
 
    # facets
    eq_ref(plotluck(rating~mpaa|Action, movies,
-                   opts=plotluck.options(max.color.factors = 0)))
+                   opts=plotluck.options(max.factor.levels.color=0)))
 
    # scatter, color
    eq_ref(plotluck(rating~mpaa|Action, movies,
-                   opts=plotluck.options(min.points.box = 1E20)))
+                   opts=plotluck.options(min.points.violin=1E20)))
 
    # scatter, color, jitter
    eq_ref(plotluck(rating~mpaa|Action, movies,
-                   opts=plotluck.options(min.points.box = 1E20, scatter.dedupe='jitter')))
+                   opts=plotluck.options(min.points.violin=1E20, scatter.dedupe='jitter')))
 
    # scatter, facets
    eq_ref(plotluck(rating~mpaa|Action, movies,
-                   opts=plotluck.options(min.points.box = 1E20, max.color.factors = 0)))
+                   opts=plotluck.options(min.points.violin=1E20, max.factor.levels.color=0)))
 })
 
 test_that_ref("3d_raster", "3D raster", {
@@ -242,8 +242,8 @@ test_that_ref("missing", "missing values", {
    df$v2[c(1,5,6)] <- NA
    eq_ref(plotluck(v~f, df))
    eq_ref(plotluck(v~f, df, opts=plotluck.options(na.rm=TRUE)))
-   eq_ref(plotluck(v~f, df, opts=plotluck.options(min.points.box=0)))
-   eq_ref(plotluck(v~f, df, opts=plotluck.options(min.points.box=0, na.rm=TRUE)))
+   eq_ref(plotluck(v~f, df, opts=plotluck.options(min.points.violin=0)))
+   eq_ref(plotluck(v~f, df, opts=plotluck.options(min.points.violin=0, na.rm=TRUE)))
    eq_ref(plotluck(f~v, df))
    eq_ref(plotluck(v2~v|f, df))
    eq_ref(plotluck(f2~f, df))

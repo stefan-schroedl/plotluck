@@ -1,7 +1,8 @@
-#'@import ggplot2
-#'@importFrom plyr ddply summarise .
-#'@importFrom stats as.formula median quantile runif xtabs
-
+#' @import ggplot2
+#' @importFrom plyr ddply summarise .
+#' @importFrom stats as.formula median quantile runif xtabs
+#' @importFrom grDevices colorRampPalette hcl
+#' @importFrom stats na.omit na.pass
 
 safe_log <- function(x,...) {
   ifelse(x<=0,0,log(x,...))
@@ -1505,7 +1506,7 @@ gplt.spine <- function(data, x, y, w='NULL',
 
   # note: if there is no data for an x/y combination, make y coordinates non-NA for displaying
   # 'zero-area' rects
-  y.cond.df <- plyr::ddply(y.cond.df, x, transform, y.cond=norm.sum(y.cond))
+  y.cond.df <- plyr::ddply(y.cond.df, x, plyr::here(transform), y.cond=norm.sum(y.cond))
   y.cond.df <- plyr::ddply(y.cond.df, x, transform, y.cond.cum=cumsum(y.cond))
   y.cond.df$y.cond.cum <- y.cond.df$y.cond.cum - y.cond.df$y.cond
 
@@ -1593,7 +1594,7 @@ gplt.spine3 <- function(data, x, y, z, w='NULL',
   z.cond.df            <- as.data.frame(aperm(z.cond), responseName='z.cond')
   # note: if there is no data for an x/y combination, make z coordinates
   # non.NA and evenly spaced for displaying 'zero-area' rects
-  z.cond.df <- plyr::ddply(z.cond.df, c(y,x), transform, z.cond=norm.sum(z.cond))
+  z.cond.df <- plyr::ddply(z.cond.df, c(y,x), plyr::here(transform), z.cond=norm.sum(z.cond))
   z.cond.df <- plyr::ddply(z.cond.df, c(y,x), transform, z.cond.cum=cumsum(z.cond))
   z.cond.df$z.cond.cum <- z.cond.df$z.cond.cum - z.cond.df$z.cond
 
@@ -1656,52 +1657,76 @@ gplt.blank <- function(text=NULL, ...) {
 }
 
 
-#'Create options structure for \code{plotluck}
+#' Create options structure for \code{plotluck}
 #'
-#'@param ... parameters to override default settings
-#'@return a named list of options, usable by function \code{plotluck}
+#' @param opts An (optional) named list to start with. Anything not specified in ... will be inherited from opts.
+#' @param ... Parameters to override default settings
+#' @return A named list of options, usable as argument to function \code{\link{plotluck}}.
 #'
 #'  \code{plotluck} accepts a list of options to modify its behavior. Calling
 #'  \code{plotluck.options} without arguments produces a list with the default
-#'  values. Specifying any number of attribute/value pairs overrides these
-#'  values selectively.
+#'  values. Specifying any number of attribute/value pairs overrides them
+#'  selectively.
 #'
-#'  Available options and their meaning is described inline in the documentation
-#'  of \code{link{plotluck}}.
+#'\tabular{lll}{
+#' \strong{Option}\tab\strong{Default}\tab\strong{Comment}\cr
+#' \code{na.rm} \tab \code{FALSE} \tab Do not show missing factor values as separate level.\cr
+#' \code{geom} \tab \code{"auto"} \tab Override type of plot; the available types for a given formula and variables can be inspected with \code{verbose=TRUE}.\cr
+#' \code{sample.max.rows} \tab \code{100000} \tab If the data set has more rows than that, sample it down.\cr
+#' \code{trans.log.thresh} \tab \code{2} \tab Threshold for logarithmic axis scaling. Visible magnification factor of the central region of the distribution.\cr
+#' \code{n.breaks.histogram} \tab \code{NA} \tab Override the number of histogram breaks.\cr
+#' \code{min.points.hex} \tab \code{5000} \tab Minimum data points required to display a hexbin plot.\cr
+#' \code{min.points.density} \tab \code{20} \tab Minimum data points required to display a density or histogram plot.\cr
+#' \code{min.points.violin} \tab \code{20} \tab Minimum data points required to display a violin or box plot.\cr
+#' \code{raster.resolution} \tab \code{30} \tab Grid spacing for raster plots.\cr
+#' \code{scatter.dedupe} \tab \code{'area'} \tab To represent multiple instances of the same coordinates in scatter plot: scale the point size, or use jitter?\cr
+#' \code{min.points.jitter} \tab \code{3} \tab Minimum number of coordinate duplicates to start jittering points.\cr
+#' \code{jitter.x} \tab \code{0.4} \tab Amount of jitter to apply in horizontal direction, as a fraction of resolution.\cr
+#' \code{jitter.y} \tab \code{0.4} \tab  Amount of jitter to apply in vertical direction, as a fraction of resolution.\cr
+#' \code{few.unique.as.factor} \tab \code{5} \tab If a numeric variable has less than that many unique values, make it an ordered factor.\cr
+#' \code{max.factor.levels} \tab \code{30} \tab For factors with more than that many levels, least frequent ones will be pruned into "other".\cr
+#' \code{max.factor.levels.color} \tab \code{3} \tab Maximum number of factor levels that can be represented as colors in the same plot.\cr
+#' \code{max.factor.levels.violin} \tab \code{20} \tab Maximum number of levels to plot violins; rather switch to box plot. \cr
+#' \code{max.factor.levels.spine.x} \tab \code{20} \tab Maximum number of levels to plot in x-direction in a spine plot. \cr
+#' \code{max.factor.levels.spine.y} \tab \code{10} \tab Maximum number of levels to plot in y-direction in a spine plot. \cr
+#' \code{max.factor.levels.spine.z} \tab \code{5} \tab Maximum number of levels to represent as colors in a spine plot. \cr
+#' \code{spine.plot.margin.x} \tab \code{0.05} \tab Horizontal gap between rectangles in a spine plot. \cr
+#' \code{spine.plot.margin.y} \tab \code{0.02} \tab Vertical gap between rectangles in a spine plot. \cr
+#' \code{facet.max.cols} \tab \code{10} \tab Maximum number of facet columns for conditional variables. \cr
+#' \code{facet.max.rows} \tab \code{10} \tab Maximum number of facet rows for conditional variables. \cr
+#' \code{facet.num.wrap} \tab \code{6} \tab Preferred number of facets for single conditional variable. \cr
+#' \code{facet.num.grid} \tab \code{3} \tab Preferred number of facets for each of two conditional variables. \cr
+#' \code{prefer.factors.vert} \tab \code{TRUE} \tab In mixed numeric/factor plots, use vertical axis for the factor. \cr
+#' \code{fill.default} \tab \code{"deepskyblue"} \tab Default fill color for density and histogram plots. \cr
+#' \code{colors.gradient} \tab \code{c(hcl(66,60,85),hcl(128,100,45))} \tab Gradient colors for numeric and ordered variables. \cr
+#' \code{palette.brewer.seq} \tab \code{"YlGn"} \tab Sequential brewer palette name. \cr
+#' \code{palette.brewer.qual} \tab \code{"Set1"} \tab Qualitative brewer palette name. \cr
+#' \code{multi.entropy.order} \tab \code{TRUE} \tab Use estimated conditional entropy to order multi-plots. \cr
+#' \code{multi.max.rows} \tab \code{6} \tab Maximum number of rows for multi-plots. \cr
+#' \code{multi.max.cols} \tab \code{6} \tab Maximum number of columns for multi-plots. \cr
+#' \code{multi.in.grid} \tab \code{TRUE} \tab In multi-plots, make a page with multiple plots, or generate each one separately. \cr
+#' \code{verbose} \tab \code{FALSE}\tab Print information about plot types, ordering, scaling, etc. \cr}
 #'
-#'@section Shortcut options:
-#'\itemize{
-#'\item By default, hex, density, box, and violin plots revert to
-#'scatter plots for low number of points. \code{prefer.scatter=FALSE} (resp.
-#'\code{TRUE}) sets \code{min.points.hex}, \code{min.points.density}, and
-#'\code{min.points.box} to zero (resp. \code{Inf}).
-#'\item If variable \code{z} is specified and the plot type, as well as its
-#'number of levels, allows it, coloring is used to for representation in a single
-#'plot; otherwise, \code{plotluck} reverts to faceting. Users can influence this
-#'behavior by setting \code{prefer.color.for.z=TRUE} (resp. \code{FALSE}), which
-#'causes \code{max.colors.scatter}, \code{max.colors.density},
-#'\code{max.colors.box}, and \code{max.colors.bar} to be \code{Inf} (resp. 0).
-#'}
-#'
-#'@note \code{plotluck}'s aim is to provide a function that is usable
+#' @note \code{plotluck}'s aim is to provide a function that is usable
 #'  "out-of-the-box", with no or very little manual tweaking. If you find
 #'  yourself needing to change option values repeatedly or find the presets to
 #'  be suboptimal, please contact the author.
 #'
-#'@seealso \code{\link{plotluck}}
-#'@export
+#' @seealso \code{\link{plotluck}}
+#' @export
+#'
 #' @examples
 #' # list all default options
 #' plotluck.options()
 #'
 #' data(iris)
 #' # default with violin plot
-#' plotluck(iris, Species, Petal.Length)
+#' plotluck(Petal.Length~Species, iris)
 #'
 #' # use box-and-whiskers plot instead
-#' plotluck(iris, Species, Petal.Length, opts=plotluck.options(use.geom.violin=FALSE))
+#' plotluck(Petal.Length~Species, iris, opts=plotluck.options(geom='box'))
 #'
-#'@export
+#' @export
 plotluck.options <- function(opts,...) {
   if (missing(opts)) {
     opts <- list(
@@ -1712,15 +1737,15 @@ plotluck.options <- function(opts,...) {
       n.breaks.histogram=NA,
       min.points.hex=5000,
       min.points.density=20,
-      min.points.box=20,
+      min.points.violin=20,
       raster.resolution=30,
       scatter.dedupe='area',
       min.points.jitter=3,
       jitter.x=0.4,
       jitter.y=0.4,
-      max.factor.levels=30,
       few.unique.as.factor=5,
-      max.color.factors=3,
+      max.factor.levels=30,
+      max.factor.levels.color=3,
       max.factor.levels.violin=20,
       max.factor.levels.spine.x=20,
       max.factor.levels.spine.y=10,
@@ -1879,192 +1904,220 @@ info.threshold <- function(cond, msg, threshold, ...) {
 
 #' "I'm feeling lucky" for ggplot
 #'
-#' The aim of \code{plotluck} is to let the user focus on \emph{what} to plot,
-#' and automate the \emph{how}. It examines the data characteristics of one,
-#' two, or three variables and accordingly creates a scatter, box, bar, density,
-#' hex or spine plot, or a heat map. It also automates handling of observation
-#' weights, log-scaling of axes, reordering of factor levels, and overlays of
-#' smoothing curves and median lines.
+#' The purpose of \code{plotluck} is to let the user focus on \emph{what} to plot,
+#' and automate the \emph{how}. Given a dependency formula with up to three
+#' variables, it tries to choose the most suitable type of plot. It also automates
+#' sampling large datasets, correct handling of observation weights, logarithmic
+#' axis scaling, ordering and pruning of factor levels, and overlaying smoothing
+#' curves or median lines.
 #'
-#' @param data a data frame
-#' @param x,y,z column names
-#' @param w weight column (optional)
-#' @param opts a named list of options (optional)
-#' @param ... additional parameters to be passed to the respective geom_* objects
-#' @return a ggplot object
-#' @export
-#'@keywords hplot, aplot, dplot
-#'@concept automation
-#'@concept visualization
-#'@concept plotting
-#'@concept exploratory data analyis
-#'@concept ggplot
-#'@concept ggplot2
-#'@concept heat map
-#'@concept density plot
-#'@concept violin plot
-#'@concept hexbin
-#'@concept histogram
-#'@concept bar plot
-#'@concept box plot
-#'@concept spine plot
-#'@concept scatter plot
-#'@concept heat map
-#'
-#' @seealso \code{\link{ggplot}}, \code{\link{plotluck.options}}, \code{\link{plotluck.multi}}
-#'
-#' @section Determining the type of plot: One-dimensional plots (i.e., when
-#'   \code{y} and \code{z} are \code{NULL}) are either density plots (for
-#'   numeric variables) or bar plots (for factors). In the former case, if the
-#'   number of data points is not sufficient (as determined by the option
-#'   \code{min.points.density}) a strip chart (1D scatter plot) is drawn.
-#'
-#'   The following table summarizes the general heuristics for \emph{two} dimensions
-#'   (\code{x, y} are not \code{NULL}):
-#'
+#' @param formula an object of class \code{\link[stats]{formula}}: a symbolic description
+#'  of the relationship of up to three variables.
 #' \tabular{lll}{
-#' \strong{x}\tab \strong{y}\tab \strong{type}\cr
-#' num\tab num\tab hexbin\cr
-#' num\tab fact\tab density (histogram)\cr
-#' fact\tab num\tab violin (box-and-whisker)\cr
-#' fact\tab fact\tab spine\cr
-#' }
+#' \strong{Formula}\tab\strong{Meaning}\tab\strong{Plot types}\cr
+#' \code{y~1}\tab Distribution of single variable\tab Density, histogram, scatter, dot, bar\cr
+#' \code{y~x}\tab One explanatory variable\tab Scatter, hex, violin, box, spine, raster\cr
+#' \code{y~x+z}\tab Two explanatory variables\tab Raster, spine\cr
+#' \code{y~1|z} or \code{y~x|z}\tab One conditional variable\tab Represented through coloring or facetting\cr
+#' \code{y~1|x+z}\tab Two conditional variables\tab Represented through facetting\cr}
+#' In addition to these base plot types, the dot symbol \code{"."} can also be used,
+#' and denotes all variables in the data frame. This gives rise to a lattice or
+#' series of plots (use with caution, can be slow).
+#' \tabular{lll}{
+#' \strong{Formula}\tab\strong{Meaning}\cr
+#' \code{.~1}\tab Distribution of each variable in the data frame, separately\cr
+#' \code{y~.}\tab Plot \code{y} against each variable in the data frame\cr
+#' \code{.~x}\tab Plot each variable in the data frame against \code{x}\cr
+#' \code{.~.}\tab Plot each variable in the data frame against each other.\cr}
+#'  See also section "Generating multiple plots at once" below.
+#' @param data a data frame.
+#' @param weights observation weights or frequencies (optional).
+#' @param opts a named list of options (optional); See also \code{\link{plotluck.options}}.
+#' @param ... additional parameters to be passed to the respective ggplot2 geom objects.
+#' @return a ggplot object, or a plotluck.multi object if the dot symbol was used.
+#' @export
+#' @keywords hplot, aplot, dplot
+#' @concept automation
+#' @concept visualization
+#' @concept plotting
+#' @concept exploratory data analyis
+#' @concept ggplot
+#' @concept ggplot2
+#' @concept heat map
+#' @concept density plot
+#' @concept violin plot
+#' @concept hexbin
+#' @concept histogram
+#' @concept bar plot
+#' @concept box plot
+#' @concept spine plot
+#' @concept mosaic plot
+#' @concept scatter plot
+#' @concept heat map
 #'
-#' In the first three cases, if the number of data points is not sufficient (as
-#' determined by the options \code{min.points.hex}, \code{min.points.density},
-#' or \code{min.points.box}), the plot switches to a scatter plot.
+#' @seealso \code{\link{plotluck.options}}, \code{\link{sample.plotluck}}, \code{\link[ggplot2]{ggplot}}
 #'
-#' Density plots come with an overlaid vertical (weighted) median line; and
-#' numeric scatter plots with a smoothing line including standard deviations.
+#' @section Determining the type of plot: Besides the shape of the formula, the
+#'   algorithm takes into account the type of variables as either numeric, ordered,
+#'   or unordered factors. Often, it makes sense to treat ordered factors similarly
+#'   as numeric types.
+#'
+#'   One-variable numeric (resp. factor) distributions are usually represented by
+#'   density (resp. Cleveland dot) charts, but can be overriden to histograms or
+#'   bar plots using the \code{geom} option. Density plots come with an overlaid
+#'   vertical median line.
+#'
+#'   For two numerical variables, by default a scatter plot is produced, but for
+#'   high numbers of points a hexbin is preferred (option \code{min.points.hex}).
+#'   These plots come with a smoothing line and standard deviation.
+#'
+#'   The relation between two factor variables can be depicted best by spine
+#'   (a.k.a., mosaic) plots, unless they have too many levels (options
+#'   \code{max.factor.levels.spine.x}, \code{max.factor.levels.spine.y},
+#'   \code{max.factor.levels.spine.z}). Otherwise, a raster plot is produced.
+#'
+#'   For a mixed-type (factor/numeric) pair of variables, violin (overrideable
+#'   to box) plots are generated. However, if the resulting graph would contain
+#'   too many (more than \code{max.factor.levels.violin}) violin plots in a row,
+#'   the algorithm switches automatically. The number of bins of a histogram can
+#'   be customized with \code{n.breaks.histogram}. The default setting, \code{NA},
+#'   applies a heuristic estimate.
+#'
+#'   In many cases with few points for one of the aggregate plots, a scatter
+#'   looks better (options \code{min.points.density}, \code{min.points.violin},
+#'   \code{min.points.hex}).
+#'
+#'   If each factor combination occurs only once in the data set, we resort to
+#'   bar plots.
 #
-#' For three dimensions, the algorithm first tries sue coloring to fit the
-#' \code{z} dimension into a single graph. If this is not possible (e.g., in the
-#' case of the hexbin plot, which encodes the number of points in a bin by the
-#' color; or as determined by the options \code{max.colors.scatter},
-#' \code{max.colors.density}, \code{max.colors.box}, or \code{max.colors.bar}),
-#' facetting is used, in a direction (i.e., horizontally or vertically subject
-#' to \code{facet.max.rows} and \code{facet.max.cols})  that facilitates
-#' comparing the particular type of plot. To this end, a numerical \code{z}
-#' variable is discretized into \code{discretize.intervals.z} many intervals of
-#' equal count or weight.
+#' @section Conditional variables: Conditional variables are represented by either
+#'   trying to fit into the same graph using coloring (\code{max.factor.levels.color}),
+#'   or by facetting (preferred dimensions \code{facet.num.wrap} (resp.
+#'   \code{facet.num.grid}) for one resp. two variables). Numeric vectors are
+#'   discretized accordingly. Facets are laid out horizontally or vertically
+#'   according to the plot type, up to maximum dimensions of \code{facet.max.rows}
+#'   and \code{facet.max.cols}.
 #'
-#'There are three notable exceptions from this rule:
-#'\itemize{
-#'\item If all three variables are categorical, a spine plot is drawn.
-#'\item If the data is "grid-like", a heat map is drawn with the mean value of \code{z} providing the color.
-#' The data is considered grid-like if
-#' \itemize{
-#' \item \code{x} and \code{y} are numeric or ordered factors, and \code{z} is numeric.
-#' \code{x} and \code{y} have at least \code{min.size.grid.heat} distinct values each.
-#' \item A sufficient fraction (as determined by option
-#' \code{min.coverage.heat}) of the \code{(x,y)} grid points has at least one
-#' data point.
-#' }
-#' \item If each factor combination occurs at most once in the data set, we resort to
-#' bar plots.
-#' }
-#'
-#'@section Reordering of factor levels: To better illustrate the relation
+#' @section Reordering of factor levels: To better illustrate the relation
 #'  between an independent factor variable and a dependent numerical variable
-#'  (or an ordered factor), factor levels are reordered according to the
-#'  (weighted) mean of the dependent variable. Typically, the dependent variable
-#'  is \code{y}, but it is \code{z} for spine plots and heat maps. If there is
-#'  no dependent numeric variable, ordering proceeds by frequency.
+#'  (or an ordered factor), levels are reordered according to the value of the
+#'  dependent variable. If no other numeric or ordered variable exists, we
+#'  sort by frequency.
 #'
-#'  \code{plotluck} respects \emph{ordered} factors, so to prevent undesirable
-#'  reordering, set the data type to \code{ordered}.
-#'
-#'@section Instance weights: Argument \code{w} allows to specify weights or
-#'  frequency counts for each row of data. All plots and summary lines take this
-#'  weight into account (well, unfortunately all except hexbin, as the
-#'  underlying implementation does not support it. We could approximate it by
-#'  resampling with replacement, but this seems a little crude).
-#'
-#'  In scatter plots, weights are indicated by a shaded disk whose area is
-#'  proportional to the weight.
-#'
-#'  There is some redundancy with regard to \emph{repeated points}, since they
-#'  are conceptually identical to unique points with an associated frequency
-#'  weight. By default, the option \code{scatter.dedupe} is
-#'  switched on, which does exactly this. If it is \code{FALSE}, horizontal and
-#'  vertical jittering will be applied if the number of duplicated points
+#' @section Instance weights: Argument \code{weights} allows to specify weights
+#'  or frequency counts for each row of data. All plots and summary statistics
+#'  take weights into account when supplied. In scatter and raster plots, weights
+#'  are indicated either by a shaded disk with proportional area (default) or by
+#'  jittering (option \code{scatter.dedupe}), if the number of duplicated points
 #'  exceeds \code{min.points.jitter}. The amount of jittering can be controlled
 #'  with \code{jitter.x} and \code{jitter.y}.
 #'
-#'@section Axis scaling: \code{plotluck} supports logarithmic and log-modulus
+#' @section Axis scaling: \code{plotluck} supports logarithmic and log-modulus
 #'  axis scaling. log-modulus is considered if values are both positive and
 #'  negative; in this case, the transform function is \code{f(x) = sign(x) *
 #'  log(1+abs(x))}.
 #'
-#'  The decision whether to apply scaling is based on the proportion of total
-#'  display range that is occupied by the 'core' region of the distribution
-#'  (between the lower and upper quartiles); namely, if the transform could
-#'  enlarge this region by a factor of at least \code{trans.log.thresh}.
+#'  The heuristic to apply scaling is based on the proportion of total display
+#'  range that is occupied by the 'core' region of the distribution between the
+#'  lower and upper quartiles; namely, the fact whether the transform could
+#'  magnify this region by a factor of at least \code{trans.log.thresh}.
 #'
-#'@section Missing values: Typically, missing (\code{NA}) values in factors are
-#'  ignored. To make these explicit, create a separate level using the
-#'  \code{exclude} option in \code{\link{factor}}. In this case, \code{plotluck}
-#'  will respect these levels. You can also explicitly set the exclude handling
-#'  using the option \code{exclude.factor}, with the same semantics as in
-#'  function \code{factor()}.
+#' @section Missing values: By default, missing (\code{NA} or \code{NaN}) values
+#'  in factors are are shown as a special factor level code{"?"}. They can be
+#'  removed by setting \code{na.rm=TRUE}. Conventionally, missing numeric values
+#'  are not shown.
 #'
-#'  Missing values in numeric variables are ignored.
-#'
-#'@section Sampling: For very large data sets, plots can take a very long time
+#' @section Sampling: For very large data sets, plots can take a very long time
 #'  (or even crash R). \code{plotluck} has a built-in stop-gap: If the data
 #'  comprises more than \code{sample.max.rows}, it will be sampled down to that
-#'  size (taking weights into account, if supplied).
+#'  size (taking into account \code{weights}, if supplied).
 #'
-#'@section Factor preprocessing: Frequently, when numeric variables have very
-#'  few values despite sufficient data size, it helps to treat these values as
-#'  the levels of a factor; this is governed by option
-#'  \code{few.unique.as.factor}.
+#' @section Factor preprocessing:  Character (resp. logical) vectors are converted to
+#'  unordered (resp. ordered) factors.
+#'
+#'  Frequently, when numeric variables have very few values despite sufficient
+#'  data size, it helps to treat these values as the levels of a factor; this is
+#'  governed by option \code{few.unique.as.factor}.
 #'
 #'  If an unordered factor has too many levels, plots can get messy. In this
 #'  case, only the \code{max.factor.levels} most frequent ones are retained,
-#'  while the rest are merged into a default level '.other.'.
+#'  while the rest are merged into a default level \code{".other."}.
 #'
-#'@section Column name matching: Column names \code{x, y, z, w} are matched by
-#'  unique prefix, and ignoring case.
+#' @section Coloring: If \code{color} or \code{fill} aesthetics are used to
+#'  distinguish different levels or ranges of a variable, the color scheme adjusts
+#'  to the type. Preferably, a sequential (resp. qualitative) palette is chosen
+#'  for a numeric/ordered (unordered) factor (\code{palette.brewer.seq},
+#'  \code{palette.brewer.qual}); see also \link[RColorBrewer]{RColorBrewer}. However, if the
+#'  size of this palette (usually between 8-12) is not sufficient, for an ordered
+#'  factor or numeric vector, a color ramp palette is generated according to options
+#'  \code{colors.gradient}. For an unordered factor with too many levels, the ggplot
+#'  default is used.
 #'
-#'@section Remarks on the choice of plot types: By default, \code{plotluck} uses
-#'  violin and density plots in place of the more traditional box-and-whisker
+#' @section Generating multiple plots at once: If \code{formula} contains a dot
+#'  (\code{"."}) symbol, the function creates a number of 1D or 2D plots by calling
+#'  \code{plotluck} repeatedly. As described above, this allows either single
+#'  distribution, one-vs-all and all-vs-all variable plots. To save space,
+#'  rendering is minimal without axis labels.
+#'
+#'  In the all-vs-all case, the diagonal contains 1D distribution plots, analogous
+#'  to the behavior of the default plot method for data frames, see
+#'  \code{\link[graphics]{plot.data.frame}}.
+#'
+#'  With setting \code{in.grid=FALSE}, plots are produced in a sequence, otherwise
+#'  together on one or multiple pages, if necessary (default). Page size is
+#'  controlled by \code{multi.max.rows} and  \code{multi.max.cols}.
+#'
+#'  With \code{entropy.order=TRUE}, plots are sorted by an estimate of
+#'  empirical conditional entropy, with the goal of prioritizing the more
+#'  predictive variables. Set \code{verbose=TRUE} if you want to see the actual
+#'  values. For large data sets the calculation can be time consuming; entropy
+#'  calculation can be suppressed by setting \code{multi.entropy.order=FALSE}.
+#'
+#'  @note The return value is an object of class \code{plotluck_multi}. This
+#'   class does not have any functionality; its sole purpose is to make this
+#'   function work in the same way as \code{ggplot} and \code{plotluck}, namely,
+#'   do the actual drawing if and only if the return value is not assigned.
+#'
+#' @section Debugging: With the option \code{verbose=TRUE} turned on, the function
+#'  will print out information about the chosen and applicable plot types, ordering,
+#'  log scaling, etc.
+#'
+#' @section Column name matching: Variable names can be abbreviated if they match
+#'  a column name uniquely by prefix.
+#'
+#' @section Remarks on supported plot types: By default, \code{plotluck}
+#'  uses violin and density plots in place of the more traditional box-and-whisker
 #'  plots and histograms; these modern graph types convey the shape of a
 #'  distribution better. In the former case, summary statistics like mean and
 #'  quantiles are less useful if the distribution is not unimodal; a wrong
 #'  choice of the number of bins of a histogram can create misleading artifacts.
 #'
-#'  If the resulting graph would contain too many (more than
-#'  \code{max.factor.levels.violin}) violin plots in a row, the algorithm switches to
-#'  box plots. The defaults can also be directly overriden by changing options
-#'  \code{use.geom.violin} and \code{use.geom.density}. The number of bins of a
-#'  histogram can be customized with \code{n.breaks.histogram}. The default
-#'  setting, \code{NA}, applies a heuristic estimate.
+#'  Following Cleveland's advice, factors are plotted on the y-axis to make labels
+#'  most readable and compact at the same time. This direction can be controlled
+#'  using option \code{prefer.factors.vert}.
 #'
 #'  Due to their well-documented problematic aspects, pie charts and stacked bar
 #'  graphs are not supported.
-#'
-#'  Cleveland's Dot Plots (\code{\link{dotchart}}) can be produced as a special
-#'  case of scatter plots.
 #'
 #'  With real-world data (as opposed to smooth mathematical functions),
 #'  three-dimensional scatter, surface, or contour plots can often be hard to
 #'  read if the shape of the distribution is not suitable, data coverage is
 #'  uneven, or if the perspective is not carefully chosen depending on the data.
-#'  Therefore, we have refrained from incorporating them.
+#'  Since they usually require manual tweaking, we have refrained from
+#'  incorporating them.
 #'
-#'@section Remarks on the use of options: For completeness, we have included the
+#' @section Remarks on the use of options: For completeness, we have included the
 #'  description of option parameters in the current help page. However, the
 #'  tenet of this function is to be usable "out-of-the-box", with no or very
 #'  little manual tweaking required. If you find yourself needing to change
 #'  option values repeatedly or find the presets to be suboptimal, please
 #'  contact the author.
 #
-#'@section What \code{plotluck} does not: This function is designed for generic
-#'  out-of-the-box plotting, and not suitable to produce more specialized types
-#'  of plots that arise in specific application domains (e.g., association,
-#'  stem-and-leaf, star plots, geo maps, etc). It is restricted to at most three
-#'  variables. Parallel plots with variables on different scales (such as time
+#' @section Limitations: \code{plotluck} is designed for generic out-of-the-box
+#'  plotting, and not suitable to produce more specialized types of plots that
+#'  arise in specific application domains (e.g., association, stem-and-leaf,
+#'  star plots, geo maps, etc). It is restricted to at most three variables.
+#'  Parallel plots with variables on different scales (such as time
 #'  series of multiple related signals) are not supported.
 #'
 #' @examples
@@ -2079,7 +2132,8 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #' invisible(readline(prompt="Press [enter] to continue"))
 #'
 #' # Scatter plot
-#' plotluck(Sepal.Width~Petal.Length|Species, iris)
+#' data(mpg, package='ggplot2')
+#' plotluck(cty~model, data=mpg)
 #' invisible(readline(prompt="Press [enter] to continue"))
 #'
 #' # Spine plot
@@ -2088,11 +2142,23 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #' invisible(readline(prompt="Press [enter] to continue"))
 #'
 #' # Facetting
+#' data(msleep, package='ggplot2')
 #' plotluck(sleep_total~bodywt|vore,msleep)
 #' invisible(readline(prompt="Press [enter] to continue"))
 #'
-#' #' Raster plot
+#' # Raster plot
 #' plotluck(price~cut+color,diamonds)
+#'
+#' # Multi plots
+#
+#' # All 1D distributions
+#' plotluck(.~1, iris)
+#'
+#' # 2D dependencies with one fixed variable on vertical axis
+#' plotluck(Species~., iris)
+#'
+#' # See also tests under tests/testthat/test_plotluck.R for more examples!
+#'
 plotluck <- function(formula, data, weights,
                      opts=plotluck.options(),
                      ...) {
@@ -2415,7 +2481,7 @@ determine.plot.type.1 <- function(data, response, indep, cond,
         if (opts.geom == 'auto') {
            # if there are too many violin plots in a horizontal row, they
            # just look like black lines
-           opts.geom <- ifelse(med.points.per.group > opts$min.points.box,
+           opts.geom <- ifelse(med.points.per.group > opts$min.points.violin,
                                ifelse(length(levels(var.fac)) <= opts$max.factor.levels.violin, 'violin', 'box'),
                                'scatter')
         }
@@ -2599,7 +2665,7 @@ add.conditional.layer <- function(p, data, response, indep, cond, type.plot, opt
   if (length(cond) == 1) {
     u <- length(unique(data[[cond]]))
 
-    if (u <= opts$max.color.factors && !(type.plot %in% c('spine', 'raster', 'hex'))) {
+    if (u <= opts$max.factor.levels.color && !(type.plot %in% c('spine', 'raster', 'hex'))) {
       p <- add.color.fill(p, data, cond,
                           colors.gradient=opts$colors.gradient,
                           palette.brewer.seq=opts$palette.brewer.seq,
@@ -2615,7 +2681,7 @@ add.conditional.layer <- function(p, data, response, indep, cond, type.plot, opt
   } else { #length(cond) == 2
     #u1 <- length(unique(data[[cond[1]]]))
     #u2 <- length(unique(data[[cond[2]]]))
-    # if (min(u1,u2) <= opts$max.color.factors) {
+    # if (min(u1,u2) <= opts$max.factor.levels.color) {
     #    if (u1 < u2) {
     #       p + aes_string(fill=cond[1]) + aes_string(color=cond[1]) +
     #          add.facet.wrap(p, data, cond[2], preferred.order, opts)
@@ -2688,63 +2754,6 @@ mplot <- function(plots, rows=ceiling(sqrt(length(plots))),
   }
 }
 
-#'Create several plots at once with \code{plotluck}
-#'
-#'Create a number of 1D or 2D ggplots for the columns a data frame by calling
-#'\code{plotluck} repeatedly.
-#'@param data a data frame
-#'@param x,y column names, or \code{all}
-#'@param w weight column (optional)
-#'@param in.grid flag whether a grid of plots should be produced
-#'@param entropy.order order dependency plots by conditional entropy
-#'@param max.cols,max.rows maximum number of plots to put on one page. If
-#'       necessary, multiple pages are generated.
-#'@param opts a named list of \code{plotluck} options (optional)
-#'@param ... additional parameters to be passed to \code{plotluck}
-#'@return an object of class plotluck_multi.
-#'
-#'  With \code{in.grid=TRUE}, produces a grid of plots, rendered as minimal
-#'  "spark lines" without annotations; otherwise, opens full plots in a separate
-#'  window each.
-#'
-#'  With \code{x=all} and \code{y=NULL}, a 1D plot for the distribution of each
-#'  variable is drawn. When \code{x} (resp. \code{y}) is set to a column name
-#'  and \code{y=all} (resp. \code{x=all}), a 2D plot is created with each
-#'  variable in \code{data} on the \code{y}-axis (resp. \code{x}-axis), in turn.
-#'  Finally, for \code{x=y=all}, a chart for each pair of variables is drawn,
-#'  with a diagonal of 1D distribution plots; this is analogous to the behavior
-#'  of the default plot method for data frames, see
-#'  \code{\link{plot.data.frame}}.
-#'
-#'  With \code{entropy.order=TRUE}, when one target variable \code{t} is drawn
-#'  against all other columns \code{z}, the plots are sorted by an estimate of
-#'  empirical conditional entropy \code{H(t|z)}; the goal is to prioritize the
-#'  more predictive independent variables. For large data sets the calculation
-#'  can sometimes be time consuming; it can be suppressed by setting
-#'  \code{entropy.order=FALSE}. Entropy ordering is never applied for 1-D
-#'  distributions or a complete matrix of all variable pairs.
-#'
-#'@note The class \code{plotluck_multi} does not have any functionality; its
-#'  sole purpose is to make this function work in the same way as \code{ggplot}
-#'  and \code{plotluck}, namely, do the actual drawing if and only if the return
-#'  value is not assigned.
-#'
-#'@seealso \code{\link{plotluck}}
-#' @examples
-#' data(iris)
-#' # All 1D distributions
-#' plotluck.multi(iris)
-#'
-#' # 2D dependencies with one fixed variable on horizontal axis
-#' plotluck.multi(iris, Species)
-#'
-#' # 2D dependencies with one fixed variable on vertical axis
-#' plotluck.multi(iris, all, Species)
-#'
-#' # All pairs of variables
-#' plotluck.multi(iris, all, all)
-
-
 plotluck.multi <- function(response, indep, data, w='NULL',
                            in.grid=TRUE,
                            max.rows=10, max.cols=10,
@@ -2801,7 +2810,7 @@ plotluck.multi <- function(response, indep, data, w='NULL',
       vars.x <- vars.x[order(cond.ent)]
       vars.y <- vars.x
     }
-    if (opts$verbose) {
+    if (opts$verbose && !is.null(cond.ent)) {
       cat('Ordering variables according to conditional entropy:\n')
       cond.ent<-sort(cond.ent)
       out<-data.frame(var=names(cond.ent),cond.ent=cond.ent)
@@ -2830,7 +2839,7 @@ plotluck.multi <- function(response, indep, data, w='NULL',
 
   is.square <- TRUE
 
-  if (!in.grid) {
+  if (!in.grid && opts$verbose) {
     cat('Not plotting all graphs on one page because multi.in.grid=FALSE\n')
   }
 
@@ -2891,7 +2900,7 @@ plotluck.multi <- function(response, indep, data, w='NULL',
     }
     if (length(vars.y) == 1) {
       if (vars.y != '1') {
-        main <- y
+        main <- vars.y
         suppress.ylab <- 'margin'
       } else {
         suppress.ylab <- 'all'
@@ -3001,7 +3010,7 @@ plotluck.multi <- function(response, indep, data, w='NULL',
 
 # auxiliary class to achieve consistent behavior of plotluck.multi with ggplot
 # and plotluck: draw the plot if an only if the return value is not assigned.
-#'@export
+#' @export
 print.plotluck_multi <- function(x, ...) {
   if (x$in.grid) {
     mplot(x$plots, rows=x$rows, cols=x$cols,
@@ -3012,21 +3021,23 @@ print.plotluck_multi <- function(x, ...) {
 }
 
 
-#'Plot a dataset with \code{plotluck} for a randomly generated formula
+#' Run \code{plotluck} for a randomly generated formula.
 #'
-#' \code{sample.plotluck} samples the formula by (1) uniformly drawing the
-#'  number of variables (1-3) and then, for each variable, (2) uniformly
-#'  choosing one of the existing types (numeric, ordered or unordered factor),
-#'  and (3) uniformly selecting one of the columns of that type.
+#' \code{sample.plotluck} samples a formula as follows:
+#' \itemize{
+#' \item Uniformly draw the number of variables (1-3).
+#' \item For each variable, uniformly choose one of the existing types (numeric, ordered or unordered factor).
+#' \item Uniformly select one of the data frame columns of that type.
+#'}
 #'
-#'@param data a data frame
-#'@param ... additional parameters to be passed to \code{plotluck}, such as
+#' @param data a data frame
+#' @param ... additional parameters to be passed to \code{plotluck}, such as
 #'       \code{weights} and \code{opts}.
-#'@return a ggplot2 object.
+#' @return a ggplot2 object.
 #'
-#'@seealso \code{\link{plotluck}}
-#'@export
-#'@examples
+#' @seealso \code{\link{plotluck}}
+#' @export
+#' @examples
 #'set.seed(42)
 #' data(iris)
 #' sample.plotluck(iris)
