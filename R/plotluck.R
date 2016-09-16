@@ -197,8 +197,10 @@ weighted.mode <- function(data, x, w) {
 # for ordered factors, compute the (weighted or unweighted) mean or median over
 #    the sorted integer levels, then round at the end.
 # for unordered factors, always compute the mode (most frequent value)
-
-group.central <- function(data, x, group.vars, w='NULL', method=c('median', 'mean'), col.name='.center.') {
+# ordered.as.num - treat ordered factors as integers, and return a numeric average
+# (in the case that the centers are used for sorting only, this prevents the rounding loss)
+group.central <- function(data, x, group.vars, w='NULL', method=c('median', 'mean'),
+                          col.name='.center.', ordered.as.num=FALSE) {
 
   method <- match.arg(method)
 
@@ -240,7 +242,7 @@ group.central <- function(data, x, group.vars, w='NULL', method=c('median', 'mea
   }
 
   # for ordinals, reattach levels
-  if (is.ord) {
+  if (is.ord && (!ordered.as.num)) {
     grp.center[[length(grp.center)]] <- ordered(lev[round(grp.center[[length(grp.center)]])], exclude=NULL)
   }
 
@@ -250,7 +252,7 @@ group.central <- function(data, x, group.vars, w='NULL', method=c('median', 'mea
 
 # make all values of data[[x]] identically equal to the group mean
 replace.by.central <- function(data, x, g, w) {
-  x.avg <- group.central(data, x, g, w, 'mean', '.replace.center.')
+  x.avg <- group.central(data, x, g, w, method='mean', col.name='.replace.center.')
   data <- merge(data, x.avg)
   data[[x]] <- data[[length(data)]]
   data[[length(data)]] <- NULL
@@ -302,11 +304,11 @@ order.factor.by.value <- function(data, x, y, w='NULL', decreasing=FALSE, verbos
     cat(sprintf('Ordering %s levels by %s\n', x, y))
   }
   # we are displaying median lines for distributions, so the sorting should agree with this
-  centers <- group.central(data, y, x, w, method='median')
+  centers <- group.central(data, y, x, w, method='median', ordered.as.num=TRUE)
 
   # if medians are equal for two or more classes, resolve ties by using the mean
   if (length(unique(centers$.center.)) != nrow(centers)) {
-    centers <- group.central(data, y, x, w, method='mean')
+    centers <- group.central(data, y, x, w, method='mean', ordered.as.num=TRUE)
   }
   if (!is.numeric(centers$.center.)) {
     centers$.center. <- as.integer(centers$.center.)
@@ -346,10 +348,7 @@ order.factors <- function(data, x, y, z='NULL', w='NULL', verbose=FALSE) {
   for (v in setdiff(v.all, v.sort)) {
     if ((!is.numeric(data[[v]])) && (!is.ordered(data[[v]]))) {
       # v is sortable
-      if (verbose) {
-        cat(sprintf('Ordering %s levels by %s\n', v, v.sort))
-      }
-      data <- order.factor.by.value(data, v, v.sort, w)
+      data <- order.factor.by.value(data, v, v.sort, w, verbose=verbose)
     }
   }
   data
@@ -784,7 +783,7 @@ estimate.label.overlap <- function(labels, breaks=seq(length(labels))) {
 # - if too few colors, use default (first two colors of brewer palette might not look good by themselves!)
 
 add.color.fill <- function(p, data, x, aesth=c('color', 'fill'),
-                           colors.gradient=c(hcl(66,60,85), hcl(128,100,35)),
+                           colors.gradient=c(hcl(66,60,85), hcl(128,100,45)),
                            palette.brewer.seq='YlGn',
                            palette.brewer.qual='Set1') {
 
@@ -979,7 +978,7 @@ gplt.scatter <- function(data, x, y, w='NULL',
   ord.x <- is.ordered(data[[x]])
   ord.y <- is.ordered(data[[y]])
 
-  data <- order.factors(data, x, y, w=w, verbose=opts$verbose)
+  data <- order.factors(data, x, y, w=w, verbose=verbose)
   for (v in c(x,y)) {
     data <- limit.factor.levels(data, v, w=w,
                                 max.levels=max.factor.levels)
@@ -1105,7 +1104,7 @@ gplt.hex <- function(data, x, y, w='NULL', trans.log.thresh=2,
 
   p +
     # log scaling of color often reveals more details
-    scale_fill_gradientn(colors=c(hcl(66,60,95), hcl(128,100,35)), trans='log', guide=FALSE) +
+    scale_fill_gradientn(colors=c(hcl(66,60,95), hcl(128,100,45)), trans='log', guide=FALSE) +
     theme(legend.position='right') +
     theme_panel_num_x + theme_panel_num_y
 }
@@ -1118,7 +1117,7 @@ gplt.hex <- function(data, x, y, w='NULL', trans.log.thresh=2,
 gplt.raster <- function(data, x, y, z='NULL', w='NULL', trans.log.thresh=2,
                         max.factor.levels=30,
                         raster.resolution=30,
-                        colors.gradient=c(hcl(66,60,85), hcl(128,100,35)),
+                        colors.gradient=c(hcl(66,60,85), hcl(128,100,45)),
                         palette.brewer.seq='YlGn',
                         palette.brewer.qual='Set1',
                         verbose=FALSE,
@@ -1293,7 +1292,7 @@ gplt.violin <- function(data, x, y, w='NULL',
   flip <- FALSE
   if (is.numeric(data[[x]])) {
     if (is.numeric(data[[y]])) {
-      stop('violin plot requires one factor variabe')
+      stop('Violin plot requires one factor variable')
     }
     flip <- TRUE
     tmp <- x
@@ -1306,7 +1305,7 @@ gplt.violin <- function(data, x, y, w='NULL',
     1E-8 * min(data[[y]], na.rm=TRUE) * (runif(nrow(data)) - 0.5)
 
   if (!is.ordered(data[[x]])) {
-    data <- order.factor.by.value(data, x, y, w)
+    data <- order.factor.by.value(data, x, y, w=w, verbose=verbose)
   }
 
   data <- limit.factor.levels(data, x, w=w,
@@ -1351,7 +1350,7 @@ gplt.box <- function(data, x, y, w='NULL',
   flip <- FALSE
   if (is.numeric(data[[x]])) {
     if (is.numeric(data[[y]])) {
-      stop('box plot requires one factor variabe')
+      stop('Box plot requires one factor variable')
     }
     flip <- TRUE
     tmp <- x
@@ -1360,7 +1359,7 @@ gplt.box <- function(data, x, y, w='NULL',
   }
 
   if (!is.ordered(data[[x]])) {
-    data <- order.factor.by.value(data, x, y, w)
+    data <- order.factor.by.value(data, x, y, w, verbose=verbose)
   }
 
   data <- limit.factor.levels(data, x, w=w,
@@ -1474,7 +1473,7 @@ norm.sum <- function(x) {
 gplt.spine <- function(data, x, y, w='NULL',
                        plot.margin.x=0.05,
                        max.factor.levels=10,
-                       colors.gradient=c(hcl(66,60,85), hcl(128,100,35)),
+                       colors.gradient=c(hcl(66,60,85), hcl(128,100,45)),
                        palette.brewer.seq='YlGn',
                        palette.brewer.qual='Set1',
                        verbose=FALSE,
@@ -1506,8 +1505,8 @@ gplt.spine <- function(data, x, y, w='NULL',
 
   # note: if there is no data for an x/y combination, make y coordinates non-NA for displaying
   # 'zero-area' rects
-  y.cond.df <- ddply(y.cond.df, x, transform, y.cond=norm.sum(y.cond))
-  y.cond.df <- ddply(y.cond.df, x, transform, y.cond.cum=cumsum(y.cond))
+  y.cond.df <- plyr::ddply(y.cond.df, x, transform, y.cond=norm.sum(y.cond))
+  y.cond.df <- plyr::ddply(y.cond.df, x, transform, y.cond.cum=cumsum(y.cond))
   y.cond.df$y.cond.cum <- y.cond.df$y.cond.cum - y.cond.df$y.cond
 
   plot.data <- y.cond.df
@@ -1552,7 +1551,7 @@ gplt.spine3 <- function(data, x, y, z, w='NULL',
                         plot.margin.x=0.05,
                         plot.margin.y=0.02,
                         max.factor.levels=10,
-                        colors.gradient=c(hcl(66,60,85), hcl(128,100,35)),
+                        colors.gradient=c(hcl(66,60,85), hcl(128,100,45)),
                         palette.brewer.seq='YlGn',
                         palette.brewer.qual='Set1',
                         verbose=FALSE,
@@ -1594,8 +1593,8 @@ gplt.spine3 <- function(data, x, y, z, w='NULL',
   z.cond.df            <- as.data.frame(aperm(z.cond), responseName='z.cond')
   # note: if there is no data for an x/y combination, make z coordinates
   # non.NA and evenly spaced for displaying 'zero-area' rects
-  z.cond.df <- ddply(z.cond.df, c(y,x), transform, z.cond=norm.sum(z.cond))
-  z.cond.df <- ddply(z.cond.df, c(y,x), transform, z.cond.cum=cumsum(z.cond))
+  z.cond.df <- plyr::ddply(z.cond.df, c(y,x), transform, z.cond=norm.sum(z.cond))
+  z.cond.df <- plyr::ddply(z.cond.df, c(y,x), transform, z.cond.cum=cumsum(z.cond))
   z.cond.df$z.cond.cum <- z.cond.df$z.cond.cum - z.cond.df$z.cond
 
   #z.cond.df$z.cond.cum <- as.vector(apply(z.cond, 2:1,
@@ -1734,7 +1733,7 @@ plotluck.options <- function(opts,...) {
       facet.num.grid=3,
       prefer.factors.vert=TRUE,
       fill.default='deepskyblue',
-      colors.gradient=c(hcl(66,60,85), hcl(128,100,35)),
+      colors.gradient=c(hcl(66,60,85), hcl(128,100,45)),
       palette.brewer.seq='YlGn',
       palette.brewer.qual='Set1',
       multi.entropy.order=TRUE,
@@ -1781,27 +1780,27 @@ parse.formula.term <- function(form) {
     if (class(form[[2]]) == 'name') {
       res <- as.character(form[[2]])
     } else if (class(form[[2]]) != 'numeric') {
-      stop('invalid formula: at most two dependent or conditional variables allowed')
+      stop('Invalid formula: at most two dependent or conditional variables allowed')
     }
     if (class(form[[3]]) == 'name') {
       res <- c(res, as.character(form[[3]]))
     } else if (class(form[[3]]) != 'numeric') {
-      stop('invalid formula: at most two dependent or conditional variables allowed')
+      stop('Invalid formula: at most two dependent or conditional variables allowed')
     }
     return(res)
   }
-  stop('invalid formula')
+  stop('Invalid formula')
 }
 
 # expected input: conditional formula with up to three variables
 # output: list of lists (response, independent variable, conditionals)
 parse.formula <- function(form) {
   if (as.character(form[[1]]) != '~') {
-    stop('invalid formula')
+    stop('Invalid formula')
   }
   node <- form[[2]]
   if (class(node) != 'name') {
-    stop('invalid formula: only one dependent variable allowed')
+    stop('Invalid formula: only one dependent variable allowed')
   }
   resp <- as.character(node)
   indep <- character()
@@ -1816,13 +1815,13 @@ parse.formula <- function(form) {
   }
 
   if (resp != '.' && (resp %in% indep || resp %in% cond)) {
-    stop('invalid formula: variable cannot be both dependent and independent')
+    stop('Invalid formula: variable cannot be both dependent and independent')
   }
   if (length(intersect(indep,cond))>0) {
-    stop('variables can only be used once')
+    stop('Variables can only be used once')
   }
   if (length(indep)+length(cond) > 2) {
-    stop('invalid formula: at most 3 variables allowed')
+    stop('Invalid formula: at most 3 variables allowed')
   }
   return(list(resp, indep, cond))
 }
@@ -1837,7 +1836,7 @@ correct.varnames <- function(x, data) {
     if (!is.na(idx)) {
       x[i] <- names(data)[idx]
     } else {
-      stop(sprintf('no such variable: %s', x[i]))
+      stop(sprintf('No such variable: %s', x[i]))
     }
   }
   x
@@ -2069,58 +2068,31 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #'  series of multiple related signals) are not supported.
 #'
 #' @examples
-#' #1D
-#' #density plot
-#' data(iris)
-#' plotluck(iris, Petal.Length)
-#'
-#'  # bar plot
-#' data(movies, package='ggplot2movies')
-#' plotluck(movies, mpaa)
-#'
-#' # 2D scatter plot
-#' plotluck(iris, Petal.Length, Petal.Width)
-#' plotluck(movies,votes,rating)
-#'
-#' # density
-#' plotluck(movies, rating, mpaa)         # using facets
-#'
+#' # Single-variable density
 #' data(diamonds, package='ggplot2')
-#' plotluck(diamonds, price, cut)
+#' plotluck(price~1, diamonds)
+#' invisible(readline(prompt="Press [enter] to continue"))
 #'
-#' plotluck(iris, Sepal.Length, Species)  # using colors
+#' # Violin plot
+#' data(iris)
+#' plotluck(Species~Petal.Length,iris)
+#' invisible(readline(prompt="Press [enter] to continue"))
 #'
-#' # box/violin plot
-#' plotluck(movies, mpaa, rating)
-#' plotluck(movies, Documentary, budget) # implicit conversion of binary variables
+#' # Scatter plot
+#' plotluck(Sepal.Width~Petal.Length|Species, iris)
+#' invisible(readline(prompt="Press [enter] to continue"))
 #'
-#' # spine plot
+#' # Spine plot
 #' data(Titanic)
-#' plotluck(as.data.frame(Titanic), Class, Survived, w=Freq)
+#' plotluck(Survived~Class+Sex, weights=Freq, as.data.frame(Titanic))
+#' invisible(readline(prompt="Press [enter] to continue"))
 #'
-#' data(occupationalStatus)
-#' df <- as.data.frame(occupationalStatus)
-#' df$origin <- ordered(df$origin)
-#' df$destination <- ordered(df$destination)
-#' plotluck(df, origin, destination, w=Freq)
+#' # Facetting
+#' plotluck(sleep_total~bodywt|vore,msleep)
+#' invisible(readline(prompt="Press [enter] to continue"))
 #'
-#' # 3D
-#' # heat map
-#' plotluck(diamonds, cut, color, price)
-#'
-#' # scatter plat
-#' plotluck(movies, length, rating, mpaa)             # using facets
-#' plotluck(iris, Petal.Length, Petal.Width, Species) # using colors
-#'
-#' # density plot
-#' plotluck(diamonds, price, cut, color)
-#'
-#' # bar plot
-#' plotluck(movies, mpaa, rating, Action) # grouped
-#'
-#' # spine plot
-#' plotluck(as.data.frame(Titanic), Class, Sex, Survived, w=Freq)
-
+#' #' Raster plot
+#' plotluck(price~cut+color,diamonds)
 plotluck <- function(formula, data, weights,
                      opts=plotluck.options(),
                      ...) {
@@ -2141,7 +2113,6 @@ plotluck <- function(formula, data, weights,
   vars <- unique(vars)
 
   # validation and preprocessing
-  data <- data[,vars, drop=FALSE]
   data <- process.weights(data, weights)
   data <- preprocess.factors(data, opts$na.rm)
 
@@ -2149,7 +2120,6 @@ plotluck <- function(formula, data, weights,
                  'Data set has %s rows, sampling down', opts$sample.max.rows,
                  nrow(data))
   data <- sample.data(data, weights, opts$sample.max.rows)
-
   if ('.' %in% vars) {
     # trellis of plots
     return(plotluck.multi(response, indep, data, w=weights,
@@ -2159,6 +2129,7 @@ plotluck <- function(formula, data, weights,
                           opts=opts,
                           ...))
   }
+  data <- data[,vars, drop=FALSE]
 
   for (v in c(response, indep)) {
     if (is.numeric(data[[v]])) {
@@ -2180,7 +2151,7 @@ plotluck <- function(formula, data, weights,
       info.threshold(opts$verbose, 'Discretizing %s into intervals', opts$facet.num.wrap, cond)
     } else {
       intervals <- opts$facet.num.grid
-      info.threshold(opts$verbose, 'Discretizing %s,%s into intervals', opts$facet.num.wrap,
+      info.threshold(opts$verbose, 'Discretizing %s,%s into intervals', opts$facet.num.grid,
                      cond[1], cond[2])
     }
 
@@ -2198,12 +2169,9 @@ plotluck <- function(formula, data, weights,
                            estimate.breaks=FALSE, method='histogram')
       } else {
         data <- limit.factor.levels(data, cond[i], w=weights,
-                                    max.levels=opts$max.factor.levels)
+                                    max.levels=intervals)
         if (!is.ordered(data[[cond[i]]])) {
-          if (opts$verbose) {
-            cat(sprintf('Ordering %s levels by %s\n', cond[i], order.by))
-          }
-          data <- order.factor.by.value(data, cond[i], order.by, weights)
+          data <- order.factor.by.value(data, cond[i], order.by, weights, verbose=opts$verbose)
         }
       }
     }
@@ -2225,11 +2193,11 @@ plotluck <- function(formula, data, weights,
     t <- table(data[,vars.non.numeric], useNA='ifany')
     num.groups   <- length(t)
     med.points.per.group <- median(t)
-    n.max.level <- max(t)
+    max.points.per.group <- max(t)
   } else {
     num.groups <- 1
     med.points.per.group <- nrow(data)
-    n.max.level <- nrow(data)
+    max.points.per.group <- nrow(data)
   }
 
   # precompute medians
@@ -2247,7 +2215,8 @@ plotluck <- function(formula, data, weights,
                                  med.points.per.group, num.groups, opts, ...)
   } else if (length(indep) == 1) {
     res <- determine.plot.type.1(data, response, indep, cond, weights,
-                                 med.points.per.group, opts, ...)
+                                 med.points.per.group, max.points.per.group,
+                                 num.groups, opts, ...)
   } else { # length(indep) == 2
     res <- determine.plot.type.2(data, response, indep[[1]], indep[[2]],
                                  weights, opts, ...)
@@ -2330,7 +2299,7 @@ determine.plot.type.0 <- function(data, response, w, med.points.per.group,
     }
   } else { # !is.numeric(data[[response]])
     choices.geom <- c('dot', 'bar', 'auto')
-    opts.geom <- match.arg(opts$geom, c('dot', 'bar', 'auto'))
+    opts.geom <- match.arg(opts$geom, choices.geom)
     if (opts.geom == 'auto') {
       opts.geom <- ifelse(num.groups < 6, 'bar', 'dot')
     }
@@ -2344,7 +2313,9 @@ determine.plot.type.0 <- function(data, response, w, med.points.per.group,
 }
 
 determine.plot.type.1 <- function(data, response, indep, cond,
-                                  w, med.points.per.group, opts,
+                                  w, med.points.per.group,
+                                  max.points.per.group,
+                                  num.groups, opts,
                                   ...) {
   p <- NULL
   type.plot <- NULL
@@ -2388,72 +2359,93 @@ determine.plot.type.1 <- function(data, response, indep, cond,
     }
 
     if (opts.geom == 'spine') {
-      type.plot <- 'spine'
-      p <- gplt.spine(data, indep, response, w=w,
-                      plot.margin.x=opts$spine.plot.margin.x,
-                      max.factor.levels=opts$max.factor.levels.spine.x,
-                      colors.gradient=opts$colors.gradient,
-                      palette.brewer.seq=opts$palette.brewer.seq,
-                      palette.brewer.qual=opts$palette.brewer.qual,
-                      verbose=opts$verbose,
-                      ...)
-    } else {
-      type.plot <- 'raster'
-      p <- gplt.raster(data, indep, response, z='NULL', w=w,
-                       trans.log.thresh=opts$trans.log.thresh,
-                       max.factor.levels=opts$max.factor.levels,
-                       raster.resolution=opts$raster.resolution,
+       type.plot <- 'spine'
+       p <- gplt.spine(data, indep, response, w=w,
+                       plot.margin.x=opts$spine.plot.margin.x,
+                       max.factor.levels=opts$max.factor.levels.spine.x,
                        colors.gradient=opts$colors.gradient,
                        palette.brewer.seq=opts$palette.brewer.seq,
                        palette.brewer.qual=opts$palette.brewer.qual,
                        verbose=opts$verbose,
                        ...)
-    }
-  } else {
-    # mixed types: one factor, one numeric
-    # assignment of variables to axes depends only on opts$prefer.factors.vert
-    choices.geom <- c('violin', 'box', 'scatter', 'auto')
-    opts.geom <- match.arg(opts$geom, choices.geom)
-    var.fac <- response
-    var.num <- indep
-    switch <- is.numeric(data[[response]]) != opts$prefer.factors.vert
-    if (switch) {
-      var.num <- response
-      var.fac <- indep
-    }
-    if (opts.geom == 'auto') {
-      # if there are too many violin plots in a horizontal row, they
-      # just look like black lines
-      opts.geom <- ifelse(med.points.per.group > opts$min.points.box,
-                          ifelse(length(levels(var.fac)) <= opts$max.factor.levels.violin, 'violin', 'box'),
-                          'scatter')
-    }
-
-    if (opts.geom == 'violin') {
-      type.plot <- 'violin'
-      p <- gplt.violin(data, var.fac, var.num, w=w,
-                       trans.log.thresh=opts$trans.log.thresh,
-                       max.factor.levels=opts$max.factor.levels,
-                       verbose=opts$verbose,
-                       ...)
-    } else if (opts.geom == 'box') {
-      type.plot <- 'box'
-      p <- gplt.box(data, var.fac, var.num, w=w,
-                    trans.log.thresh=opts$trans.log.thresh,
-                    max.factor.levels=opts$max.factor.levels,
-                    verbose=opts$verbose,
-                    ...)
-    } else { # opts.geom == 'scatter'
-      # not enough points for violin or box plot
-      type.plot <- 'scatter.mixed'
-      p <- gplt.scatter(data, var.fac, var.num, w=w,
-                        scatter.dedupe=opts$scatter.dedupe,
-                        min.points.jitter=opts$min.points.jitter,
+    } else {
+       type.plot <- 'raster'
+       p <- gplt.raster(data, indep, response, z='NULL', w=w,
                         trans.log.thresh=opts$trans.log.thresh,
                         max.factor.levels=opts$max.factor.levels,
+                        raster.resolution=opts$raster.resolution,
+                        colors.gradient=opts$colors.gradient,
+                        palette.brewer.seq=opts$palette.brewer.seq,
+                        palette.brewer.qual=opts$palette.brewer.qual,
                         verbose=opts$verbose,
                         ...)
     }
+  } else {
+     # mixed types: one factor, one numeric
+
+     if (max.points.per.group <= 1) {
+        # special case: single point each - use bar plot
+        choices.geom <- c('dot', 'bar', 'auto')
+        opts.geom <- match.arg(opts$geom, choices.geom)
+        if (opts.geom == 'auto') {
+           opts.geom <- ifelse(num.groups < 6, 'bar', 'dot')
+        }
+        type.plot <- opts.geom
+        var.fac <- response
+        var.num <- indep
+        if (is.numeric(data[[response]])) {
+           var.fac <- indep
+           var.num <- response
+        }
+        p <- gplt.dot(data, var.fac, w=var.num, vertical=opts$prefer.factors.vert,
+                      max.factor.levels=opts$max.factor.levels, geom=opts.geom,
+                      verbose=opts$verbose, ...)
+     } else { #
+
+        choices.geom <- c('violin', 'box', 'scatter', 'auto')
+        opts.geom <- match.arg(opts$geom, choices.geom)
+        var.fac <- response
+        var.num <- indep
+        # assignment of variables to axes depends only on opts$prefer.factors.vert
+        switch <- is.numeric(data[[response]]) != opts$prefer.factors.vert
+        if (switch) {
+           var.num <- response
+           var.fac <- indep
+        }
+        if (opts.geom == 'auto') {
+           # if there are too many violin plots in a horizontal row, they
+           # just look like black lines
+           opts.geom <- ifelse(med.points.per.group > opts$min.points.box,
+                               ifelse(length(levels(var.fac)) <= opts$max.factor.levels.violin, 'violin', 'box'),
+                               'scatter')
+        }
+
+        if (opts.geom == 'violin') {
+           type.plot <- 'violin'
+           p <- gplt.violin(data, var.fac, var.num, w=w,
+                            trans.log.thresh=opts$trans.log.thresh,
+                            max.factor.levels=opts$max.factor.levels,
+                            verbose=opts$verbose,
+                            ...)
+        } else if (opts.geom == 'box') {
+           type.plot <- 'box'
+           p <- gplt.box(data, var.fac, var.num, w=w,
+                         trans.log.thresh=opts$trans.log.thresh,
+                         max.factor.levels=opts$max.factor.levels,
+                         verbose=opts$verbose,
+                         ...)
+        } else { # opts.geom == 'scatter'
+           # not enough points for violin or box plot
+           type.plot <- 'scatter.mixed'
+           p <- gplt.scatter(data, var.fac, var.num, w=w,
+                             scatter.dedupe=opts$scatter.dedupe,
+                             min.points.jitter=opts$min.points.jitter,
+                             trans.log.thresh=opts$trans.log.thresh,
+                             max.factor.levels=opts$max.factor.levels,
+                             verbose=opts$verbose,
+                             ...)
+        }
+     }
   }
   info.options(opts.geom, choices.geom, opts$verbose)
   list(p, type.plot)
@@ -2613,7 +2605,7 @@ add.conditional.layer <- function(p, data, response, indep, cond, type.plot, opt
                           palette.brewer.seq=opts$palette.brewer.seq,
                           palette.brewer.qual=opts$palette.brewer.qual)
 
-      aesth.legend <- ifelse(type.plot %in% c('density', 'histogram', 'bar'), 'fill', 'color')
+      aesth.legend <- ifelse(type.plot %in% c('density', 'histogram', 'bar', 'violin'), 'fill', 'color')
       p <- add.color.legend(p, data, cond, aesth.legend)
 
     } else {
@@ -2768,26 +2760,26 @@ plotluck.multi <- function(response, indep, data, w='NULL',
     if (length(indep) == 0) {
       vars.x <- '1'
       if (opts$verbose) {
-        cat('plotting distributions for all variables')
+        cat('Plotting distributions for all variables\n')
       }
     } else if (indep == '.') {
       vars.x <- names(data)
       if (opts$verbose) {
-        cat('plotting each variable against each other')
+        cat('Plotting each variable against each other\n')
       }
     }  else {
       vars.x <- indep
       if (opts$verbose) {
-        cat(sprintf('plotting each variable against %s', vars.x))
+        cat(sprintf('Plotting each variable against %s\n', vars.x))
       }
     }
   } else { # response != '.'
     vars.y <- response
     if(indep != '.') {
-      stop('error: invalid formula')
+      stop('Error: invalid formula')
     }
     if (opts$verbose) {
-      cat(sprintf('plotting each variable against %s', vars.y))
+      cat(sprintf('Plotting %s against each variable\n', vars.y))
     }
     vars.x <- names(data)
   }
@@ -2796,15 +2788,15 @@ plotluck.multi <- function(response, indep, data, w='NULL',
   cond.ent <- NULL
   if (opts$multi.entropy.order) {
     if (length(vars.y) > 1 && length(vars.x) == 1 && vars.x != '1') {
-      cond.ent <- cond.entropy.data(data, given=vars.x, w=w)
+      cond.ent <- suppressWarnings(cond.entropy.data(data, given=vars.x, w=w))
       cond.ent <- cond.ent[,vars.x]
       vars.y <- vars.y[order(cond.ent)]
     } else if (length(vars.y) == 1 && length(vars.x) > 1) {
-      cond.ent <- cond.entropy.data(data, target=vars.y, w=w)
+      cond.ent <- suppressWarnings(cond.entropy.data(data, target=vars.y, w=w))
       cond.ent <- cond.ent[vars.y,]
       vars.x <- vars.x[order(cond.ent)]
     } else if (length(vars.y) > 1 && length(vars.x) > 1) {
-      cond.ent <- cond.entropy.data(data, w=w)
+      cond.ent <- suppressWarnings(cond.entropy.data(data, w=w))
       cond.ent <- (apply(cond.ent, 1, mean) + apply(cond.ent, 1, mean))/2
       vars.x <- vars.x[order(cond.ent)]
       vars.y <- vars.x
@@ -2825,37 +2817,6 @@ plotluck.multi <- function(response, indep, data, w='NULL',
   combi$fac.x <- sapply(combi$x, function(v) !is.numeric(data[[v]]))
   combi$fac.y <- sapply(combi$y, function(v) !is.numeric(data[[v]]))
 
-  # For mixed factor/num combinations, plotluck() assigns the axes only
-  # depending on opts$prefer.factors.vert. In the output lattice for
-  # plotluck.multi, we need to control the direction (and show opposites
-  # at mirror position)
-  combi$opts <- 'prefer.factors.vert=TRUE'
-  combi$labs <- ''
-  if (length(vars.x) > 1 && length(vars.y) == 1) {
-    if (is.numeric(data[[vars.y]])) {
-      combi$opts <-
-        'prefer.factors.vert=FALSE'
-    }
-  } else  if (length(vars.x) == 1 && length(vars.y) > 1) {
-    if (!is.numeric(data[[vars.x]])) {
-      combi$opts <-
-        'prefer.factors.vert=FALSE'
-    }
-  } else {  # length(vars.x) > 1 && length(vars.y) > 1
-    below.diag <- combi$grid.x > combi$grid.y
-    combi$opts[below.diag & combi$fac.x] <-
-      'prefer.factors.vert=FALSE'
-    combi$opts[(!below.diag) & (!combi$fac.y)] <-
-      'prefer.factors.vert=FALSE'
-
-    # label the corner elements with the variable name, instead
-    # of 'density' or 'count' (diagonal contains distribution plots)
-    idx.id <- combi$x == combi$y
-    combi$labs[idx.id] <-
-      sprintf('+xlab("%s")+ylab("%s")', combi$x[idx.id],
-              combi$y[idx.id])
-  }
-
   # try to make a square layout
   cols <- ceiling(sqrt(nrow(combi)))
   rows <- ceiling(nrow(combi)/cols)
@@ -2870,7 +2831,7 @@ plotluck.multi <- function(response, indep, data, w='NULL',
   is.square <- TRUE
 
   if (!in.grid) {
-    cat('Not plotting all graphs in one page because multi.in.grid=FALSE')
+    cat('Not plotting all graphs on one page because multi.in.grid=FALSE\n')
   }
 
   if (in.grid) {
@@ -2906,7 +2867,7 @@ plotluck.multi <- function(response, indep, data, w='NULL',
       cols <- max.cols
       rows <- min(max.rows, ceiling(nrow(combi)/cols))
       if (opts$verbose) {
-        cat(sprintf('Cannot fit all %d variables on one page; multi.max.rows = %d, multi.max.cols= %d',
+        cat(sprintf('Cannot fit all %d variables on one page; multi.max.rows = %d, multi.max.cols= %d\n',
                     max.rows, max.cols))
       }
     }
@@ -2936,16 +2897,81 @@ plotluck.multi <- function(response, indep, data, w='NULL',
         suppress.ylab <- 'all'
       }
     }
+
+    # For mixed factor/num combinations, plotluck() assigns the axes only
+    # depending on opts$prefer.factors.vert. In the output lattice for
+    # plotluck.multi, we need to control the direction (and show opposites
+    # at mirror position)
+    combi$opts <- 'prefer.factors.vert=TRUE'
+    combi$labs <- ''
+    if (length(vars.x) > 1 && length(vars.y) == 1) {
+       if (is.numeric(data[[vars.y]])) {
+          combi$opts <-
+             'prefer.factors.vert=FALSE'
+       }
+    } else  if (length(vars.x) == 1 && length(vars.y) > 1) {
+       if (!is.numeric(data[[vars.x]])) {
+          combi$opts <-
+             'prefer.factors.vert=FALSE'
+       }
+    } else {  # length(vars.x) > 1 && length(vars.y) > 1
+       below.diag <- combi$grid.x > combi$grid.y
+       combi$opts[below.diag & combi$fac.x] <-
+          'prefer.factors.vert=FALSE'
+       combi$opts[(!below.diag) & (!combi$fac.y)] <-
+          'prefer.factors.vert=FALSE'
+
+       # label the corner elements with the variable name, instead
+       # of 'density' or 'count' (diagonal contains distribution plots)
+       idx.id <- combi$x == combi$y
+       combi$labs[idx.id] <-
+          sprintf('+xlab("%s")+ylab("%s")', combi$x[idx.id],
+                  combi$y[idx.id])
+    }
   }
 
+  combi$opts <- sprintf('prefer.factors.vert=%s', opts$prefer.factors.vert)
+  combi$labs <- ''
   if (length(vars.x) > 1 && length(vars.y) > 1 &&
       ((!in.grid) || (!is.square))) {
     # plots with the axis transposed are redundant;
     # if not part of grid, no need to show them
     combi <- combi[combi$grid.x >= combi$grid.y,]
+
+  } else {
+
+     # For mixed factor/num combinations, plotluck() assigns the axes only
+     # depending on opts$prefer.factors.vert. In the output lattice for
+     # plotluck.multi, we need to control the direction (and show opposites
+     # at mirror position)
+     combi$opts <- 'prefer.factors.vert=TRUE'
+     if (length(vars.x) > 1 && length(vars.y) == 1) {
+        if (is.numeric(data[[vars.y]])) {
+           combi$opts <-
+              'prefer.factors.vert=FALSE'
+        }
+     } else  if (length(vars.x) == 1 && length(vars.y) > 1) {
+        if (!is.numeric(data[[vars.x]])) {
+           combi$opts <-
+              'prefer.factors.vert=FALSE'
+        }
+     } else {  # length(vars.x) > 1 && length(vars.y) > 1
+        below.diag <- combi$grid.x > combi$grid.y
+        combi$opts[below.diag & combi$fac.x] <-
+           'prefer.factors.vert=FALSE'
+        combi$opts[(!below.diag) & (!combi$fac.y)] <-
+           'prefer.factors.vert=FALSE'
+
+        # label the corner elements with the variable name, instead
+        # of 'density' or 'count' (diagonal contains distribution plots)
+        idx.id <- combi$x == combi$y
+        combi$labs[idx.id] <-
+           sprintf('+xlab("%s")+ylab("%s")', combi$x[idx.id],
+                   combi$y[idx.id])
+     }
   }
 
-  # plot distributions for x~x
+  # plot single-variable distributions for x~x
   combi$x[combi$x == combi$y] <- '1'
 
   if (w != 'NULL')
@@ -2988,15 +3014,15 @@ print.plotluck_multi <- function(x, ...) {
 
 #'Plot a dataset with \code{plotluck} for a randomly generated formula
 #'
+#' \code{sample.plotluck} samples the formula by (1) uniformly drawing the
+#'  number of variables (1-3) and then, for each variable, (2) uniformly
+#'  choosing one of the existing types (numeric, ordered or unordered factor),
+#'  and (3) uniformly selecting one of the columns of that type.
+#'
 #'@param data a data frame
 #'@param ... additional parameters to be passed to \code{plotluck}, such as
 #'       \code{weights} and \code{opts}.
 #'@return a ggplot2 object.
-#'
-#'  \code{sample.plotluck} samples the formula by (1) uniformly drawing the
-#'  number of variables (1-3) and then, for each variable, (2) uniformly
-#'  choosing one of the existing types (numeric, ordered or unordered factor),
-#'  and (3) uniformly selecting one of the columns of that type.
 #'
 #'@seealso \code{\link{plotluck}}
 #'@export
