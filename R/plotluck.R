@@ -367,12 +367,14 @@ limit.factor.levels <- function(data, x, w='NULL',
                                 tol=max.levels*1.5,
                                 by.frequency=TRUE,
                                 reverse=FALSE) {
+
   x.data <- data[[x]]
 
   if (is.numeric(x.data)) {
     return(data)
   }
 
+  # note: there can be unused levels!
   u <- length(levels(x.data))
 
   if (u <= tol) {
@@ -393,13 +395,14 @@ limit.factor.levels <- function(data, x, w='NULL',
         tab <- xtabs(as.formula(sprintf('%s ~ %s', w, x)), data.tmp,  exclude=NULL, na.action=na.pass)
       }
       # make sure that ties are broken according to previous order!
-      ord <- order(tab, as.numeric(names(tab)), decreasing=FALSE)
+      tab <- tab[order(tab, as.numeric(names(tab)), decreasing=FALSE)]
     }
-    levels.ord <- levels(x.data)[ord]
+    levels.ord <- levels(x.data)[as.integer(names(tab))]
+    ll <- length(levels.ord)
     if (!reverse) {
-      levels.reduced <- levels.ord[seq(u-max.levels+1,u)]
+      levels.reduced <- levels.ord[seq(max(1,ll-max.levels+1),ll)]
     } else {
-      levels.reduced <- levels.ord[seq(max.levels)]
+      levels.reduced <- levels.ord[seq(min(max.levels,ll))]
     }
     # note: we want to maintain the original order of levels!
     idx.trunc <- !(x.data %in% levels.reduced)
@@ -570,9 +573,9 @@ discretize <- function(data, x,
 # - convert character vectors into factors
 # - convert logicals into ordered factors
 
-preprocess.factors <- function(data, na.rm) {
+preprocess.factors <- function(data, vars, na.rm=FALSE) {
 
-  for (x in names(data)) {
+  for (x in vars) {
 
     x.data <- data[[x]]
     non.na <- !is.na(x.data)
@@ -760,6 +763,7 @@ theme_panel_fac_y <- theme(panel.grid.major.y=element_blank(),
 # for factors, write horizontal axis labels at an angle to avoid overlap
 theme_slanted_text_x <- theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=1))
 
+
 # detect if x axis text might overlap
 estimate.label.overlap <- function(labels, breaks=seq(length(labels))) {
   if (length(breaks) < 2) {
@@ -945,15 +949,15 @@ add.axis.transform <- function(p, data, x, ax=c('x','y'), trans.log.thresh=2, ve
 
 # 2D scatter plot of numeric or factor variables
 # - overlay smoothing line if both variables are numeric
-# - scatter.dedupe='area' - unique repeated points, count frequency
-# - scatter.dedupe='jitter' - plot each repeated point separately, add
+# - depdupe.scatter='area' - unique repeated points, count frequency
+# - depdupe.scatter='jitter' - plot each repeated point separately, add
 #   jitter if there are more than min.points.jitter with identical coordinates
 # - counts/weights are drawn with a shaded circle of proportional area
 # - jitter.x, jitter.y - the amount of jittering as a multiple of resolution
 # - trans.log.thresh - threshold to decide on log-transform
 # - fill.smooth - fill color for smoothing line
 gplt.scatter <- function(data, x, y, w='NULL',
-                         scatter.dedupe=c('area','jitter'),
+                         depdupe.scatter=c('area','jitter'),
                          min.points.jitter=3,
                          jitter.x=0.4,
                          jitter.y=0.4,
@@ -963,7 +967,7 @@ gplt.scatter <- function(data, x, y, w='NULL',
                          verbose=FALSE,
                          ...) {
 
-  scatter.dedupe <- match.arg(scatter.dedupe)
+  depdupe.scatter <- match.arg(depdupe.scatter)
   flip <- FALSE
   if (is.numeric(data[[x]]) && (!is.numeric(data[[y]]))) {
     # HACK: ggplot2 does not implement vertical dodging, therefore we
@@ -985,7 +989,7 @@ gplt.scatter <- function(data, x, y, w='NULL',
                                 max.levels=max.factor.levels)
   }
 
-  if (scatter.dedupe == 'area') {
+  if (depdupe.scatter == 'area') {
     # record frequency/total weight for each unique row of the data
     if (w == 'NULL') {
       # equivalent to 'uniq -c'
@@ -1111,13 +1115,13 @@ gplt.hex <- function(data, x, y, w='NULL', trans.log.thresh=2,
 }
 
 
-# raster plot
+# heat map
 # point grid of discretized values, with optional discretized color (z)
 # the color is a representation of an appropriate central tendency measure
 # for the point bin (mode for factors, median for ordinal and numeric vectors)
-gplt.raster <- function(data, x, y, z='NULL', w='NULL', trans.log.thresh=2,
+gplt.heat <- function(data, x, y, z='NULL', w='NULL', trans.log.thresh=2,
                         max.factor.levels=30,
-                        raster.resolution=30,
+                        resolution.heat=30,
                         colors.gradient=c(hcl(66,60,85), hcl(128,100,45)),
                         palette.brewer.seq='YlGn',
                         palette.brewer.qual='Set1',
@@ -1145,11 +1149,11 @@ gplt.raster <- function(data, x, y, z='NULL', w='NULL', trans.log.thresh=2,
   # quantize variables
   for (v in c(x,y)) {
     if (is.numeric(data[[v]])) {
-      data <- discretize(data, v, w=w, max.breaks=raster.resolution, estimate.breaks=FALSE,
+      data <- discretize(data, v, w=w, max.breaks=resolution.heat, estimate.breaks=FALSE,
                          method='histogram')
     } else {
       data <- limit.factor.levels(data, v, w=w,
-                                  max.levels=raster.resolution, tol=max.factor.levels)
+                                  max.levels=resolution.heat, tol=max.factor.levels)
     }
   }
 
@@ -1198,9 +1202,29 @@ gplt.raster <- function(data, x, y, z='NULL', w='NULL', trans.log.thresh=2,
     names(data)[length(data)] <- w
   }
 
-  p <- ggplot(data, aes_string(x=x, y=y, size=w, color=z, fill=z, weight=w)) +
-    geom_point(na.rm=TRUE, ...) +
-    scale_size(guide=FALSE)
+  # scale the area of the rectangle such that:
+  # - the largest one is equal to the grid length
+  # - the smallest one is still visible
+  # - the area is proportional to the weight
+
+  res.x <- resolution(as.numeric(data[[x]]))
+  res.y <- resolution(as.numeric(data[[y]]))
+
+  w.max <- sqrt(max(data[[w]]))
+  w.min <- sqrt(min(data[[w]]))
+  w.rg <- w.max - w.min
+  if (w.rg == 0) {
+     sz <- rep(1, nrow(data))
+  } else {
+     sz.max <- 1
+     sz.min <- max(0.1, w.min/w.max)
+     sz <- sz.min + (sqrt(data[[w]]) - w.min) * (sz.max - sz.min)  / w.rg
+  }
+
+  data$width <- res.x * sz
+  data$height <- res.y * sz
+  p <- ggplot(data, aes_string(x=x, y=y, height='height', width='width', color=z, fill=z, weight=w)) +
+    geom_tile(na.rm=TRUE, ...)
 
   # axis transformation
   p <- add.axis.transform(p, data, x, 'x', trans.log.thresh, verbose=verbose)
@@ -1211,7 +1235,7 @@ gplt.raster <- function(data, x, y, z='NULL', w='NULL', trans.log.thresh=2,
                         colors.gradient=colors.gradient,
                         palette.brewer.seq=palette.brewer.seq,
                         palette.brewer.qual=palette.brewer.qual)
-    p <- add.color.legend(p, data, z, 'color')
+    p <- add.color.legend(p, data, z, 'fill')
   }
 
   # show gridlines
@@ -1391,31 +1415,30 @@ gplt.density <- function(data, x, w='NULL',
                          verbose=FALSE,
                          ...) {
 
-  p <- ggplot(data, aes_string(x=x, weight=w)) +
-    geom_density(aes(y=..scaled..), alpha=0.6, adjust=0.5, trim=TRUE, na.rm=TRUE, ...) +
-    geom_rug(na.rm=TRUE)
+   ylab <- 'density'
+   if (w != 'NULL') {
+      ylab <- sprintf('%s density', w)
+   }
 
-  # geom_vline cannot be used, see https://github.com/hadley/ggplot2/issues/426
-  # .center. explicitly precomputed before
-  # known issue: color cannot be set here, dependent on conditional layer
-  # (does not automatically inherit)
-  if ('.center.' %in% names(data)) {
-    p <- p + geom_vline(aes(xintercept=.center.), linetype='dashed', size=0.7, na.rm=TRUE)
-  }
+   p <- ggplot(data, aes_string(x=x, weight=w)) +
+      geom_density(aes(y=..scaled..), alpha=0.6, adjust=0.5, trim=TRUE, na.rm=TRUE, ...) +
+      geom_rug(na.rm=TRUE)
 
-  # axis transformation
-  p <- add.axis.transform(p, data, x, 'x', trans.log.thresh, verbose=verbose)
+   # geom_vline cannot be used, see https://github.com/hadley/ggplot2/issues/426
+   # .center. explicitly precomputed before
+   # known issue: color cannot be set here, dependent on conditional layer
+   # (does not automatically inherit)
+   if ('.center.' %in% names(data)) {
+      p <- p + geom_vline(aes(xintercept=.center.), linetype='dashed', size=0.7, na.rm=TRUE)
+   }
 
-  ylab <- 'density'
-  if (w != 'NULL') {
-    ylab <- sprintf('%s density', w)
-  }
-
-  p + ylab(ylab) +
-    # density numbers themselves not very meaningful
-    theme(axis.ticks.y=element_blank(),
-          axis.text.y=element_blank()) +
-    theme_panel_num_x
+   # axis transformation
+   p <- add.axis.transform(p, data, x, 'x', trans.log.thresh, verbose=verbose) +
+      ylab(ylab) +
+      # density numbers themselves not very meaningful
+      theme(axis.ticks.y=element_blank(),
+            axis.text.y=element_blank()) +
+      theme_panel_num_x
 }
 
 # histogram plot with overlayed vertical median lines
@@ -1525,7 +1548,7 @@ gplt.spine <- function(data, x, y, w='NULL',
   p <- ggplot(plot.data, aes(xmin=left, xmax=right, ymin=bottom, ymax=top)) +
     # make outline color same as fill color - black outline will hide colors
     # for very narrow stripes
-    geom_rect(aes_string(color=y, fill=y), alpha=0.6, na.rm=TRUE, ...) +
+    geom_rect(aes_string(color=y, fill=y), size=1, alpha=0.6, na.rm=TRUE, ...) +
     scale_x_continuous(breaks=x.tab.df$x.center, labels=levels(data[[x]])) +
     theme(axis.ticks.x=element_blank()) +
     # y reflected in color legend; however, we do want the label when part of a multiplot!
@@ -1614,7 +1637,8 @@ gplt.spine3 <- function(data, x, y, z, w='NULL',
   p <- ggplot(plot.data, aes(xmin=left, xmax=right, ymin=bottom, ymax=top)) +
     # make outline color same as fill color - black outline will hide colors
     # for very narrow stripes
-    geom_rect(aes_string(color=z, fill=z), alpha=0.6, na.rm=TRUE, ...) +
+    # size=1: make sure empty rects are still visible
+    geom_rect(aes_string(color=z, fill=z), size=1, alpha=0.6, na.rm=TRUE, ...) +
     scale_y_continuous(breaks=y.tab.df$y.center, labels=levels(data[[y]])) +
     scale_x_continuous(breaks=x.tab.df$x.center, labels=levels(data[[x]]))
 
@@ -1678,8 +1702,8 @@ gplt.blank <- function(text=NULL, ...) {
 #' \code{min.points.hex} \tab \code{5000} \tab Minimum data points required to display a hexbin plot.\cr
 #' \code{min.points.density} \tab \code{20} \tab Minimum data points required to display a density or histogram plot.\cr
 #' \code{min.points.violin} \tab \code{20} \tab Minimum data points required to display a violin or box plot.\cr
-#' \code{raster.resolution} \tab \code{30} \tab Grid spacing for raster plots.\cr
-#' \code{scatter.dedupe} \tab \code{'area'} \tab To represent multiple instances of the same coordinates in scatter plot: scale the point size, or use jitter?\cr
+#' \code{resolution.heat} \tab \code{30} \tab Grid spacing for heat maps.\cr
+#' \code{depdupe.scatter} \tab \code{'area'} \tab To represent multiple instances of the same coordinates in scatter plot: scale the point size, or use jitter?\cr
 #' \code{min.points.jitter} \tab \code{3} \tab Minimum number of coordinate duplicates to start jittering points.\cr
 #' \code{jitter.x} \tab \code{0.4} \tab Amount of jitter to apply in horizontal direction, as a fraction of resolution.\cr
 #' \code{jitter.y} \tab \code{0.4} \tab  Amount of jitter to apply in vertical direction, as a fraction of resolution.\cr
@@ -1738,11 +1762,11 @@ plotluck.options <- function(opts,...) {
       min.points.hex=5000,
       min.points.density=20,
       min.points.violin=20,
-      raster.resolution=30,
-      scatter.dedupe='area',
       min.points.jitter=3,
       jitter.x=0.4,
       jitter.y=0.4,
+      resolution.heat=30,
+      depdupe.scatter='area',
       few.unique.as.factor=5,
       max.factor.levels=30,
       max.factor.levels.color=3,
@@ -1916,8 +1940,8 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #' \tabular{lll}{
 #' \strong{Formula}\tab\strong{Meaning}\tab\strong{Plot types}\cr
 #' \code{y~1}\tab Distribution of single variable\tab Density, histogram, scatter, dot, bar\cr
-#' \code{y~x}\tab One explanatory variable\tab Scatter, hex, violin, box, spine, raster\cr
-#' \code{y~x+z}\tab Two explanatory variables\tab Raster, spine\cr
+#' \code{y~x}\tab One explanatory variable\tab Scatter, hex, violin, box, spine, heat\cr
+#' \code{y~x+z}\tab Two explanatory variables\tab heat, spine\cr
 #' \code{y~1|z} or \code{y~x|z}\tab One conditional variable\tab Represented through coloring or facetting\cr
 #' \code{y~1|x+z}\tab Two conditional variables\tab Represented through facetting\cr}
 #' In addition to these base plot types, the dot symbol \code{"."} can also be used,
@@ -1974,7 +1998,7 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #'   The relation between two factor variables can be depicted best by spine
 #'   (a.k.a., mosaic) plots, unless they have too many levels (options
 #'   \code{max.factor.levels.spine.x}, \code{max.factor.levels.spine.y},
-#'   \code{max.factor.levels.spine.z}). Otherwise, a raster plot is produced.
+#'   \code{max.factor.levels.spine.z}). Otherwise, a heat map is produced.
 #'
 #'   For a mixed-type (factor/numeric) pair of variables, violin (overrideable
 #'   to box) plots are generated. However, if the resulting graph would contain
@@ -2006,9 +2030,9 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #'
 #' @section Instance weights: Argument \code{weights} allows to specify weights
 #'  or frequency counts for each row of data. All plots and summary statistics
-#'  take weights into account when supplied. In scatter and raster plots, weights
+#'  take weights into account when supplied. In scatter and heat maps, weights
 #'  are indicated either by a shaded disk with proportional area (default) or by
-#'  jittering (option \code{scatter.dedupe}), if the number of duplicated points
+#'  jittering (option \code{depdupe.scatter}), if the number of duplicated points
 #'  exceeds \code{min.points.jitter}. The amount of jittering can be controlled
 #'  with \code{jitter.x} and \code{jitter.y}.
 #'
@@ -2143,11 +2167,11 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #'
 #' # Facetting
 #' data(msleep, package='ggplot2')
-#' plotluck(sleep_total~bodywt|vore,msleep)
+#' plotluck(sleep_total~bodywt|vore, msleep)
 #' invisible(readline(prompt="Press [enter] to continue"))
 #'
-#' # Raster plot
-#' plotluck(price~cut+color,diamonds)
+#' # Heat map
+#' plotluck(price~cut+color, diamonds)
 #'
 #' # Multi plots
 #
@@ -2157,7 +2181,7 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #' # 2D dependencies with one fixed variable on vertical axis
 #' plotluck(Species~., iris)
 #'
-#' # See also tests under tests/testthat/test_plotluck.R for more examples!
+#' # See also tests/testthat/test_plotluck.R for more examples!
 #'
 plotluck <- function(formula, data, weights,
                      opts=plotluck.options(),
@@ -2179,13 +2203,17 @@ plotluck <- function(formula, data, weights,
   vars <- unique(vars)
 
   # validation and preprocessing
+  if (!('.' %in% vars)) {
+     data <- data[,vars, drop=FALSE]
+  }
+  data <- sample.data(data, weights, opts$sample.max.rows)
   data <- process.weights(data, weights)
-  data <- preprocess.factors(data, opts$na.rm)
+  data <- preprocess.factors(data, setdiff(vars, c(weights, '.')), opts$na.rm)
 
   info.threshold(opts$verbose && nrow(data) > opts$sample.max.rows,
                  'Data set has %s rows, sampling down', opts$sample.max.rows,
                  nrow(data))
-  data <- sample.data(data, weights, opts$sample.max.rows)
+
   if ('.' %in% vars) {
     # trellis of plots
     return(plotluck.multi(response, indep, data, w=weights,
@@ -2195,7 +2223,6 @@ plotluck <- function(formula, data, weights,
                           opts=opts,
                           ...))
   }
-  data <- data[,vars, drop=FALSE]
 
   for (v in c(response, indep)) {
     if (is.numeric(data[[v]])) {
@@ -2339,7 +2366,7 @@ determine.plot.type.0 <- function(data, response, w, med.points.per.group,
       type.plot <- 'scatter.num.1'
       if (!opts$prefer.factors.vert) {
         p <- gplt.scatter(data, indep, response, w=w,
-                          scatter.dedupe=opts$scatter.dedupe,
+                          depdupe.scatter=opts$depdupe.scatter,
                           min.points.jitter=opts$min.points.jitter,
                           trans.log.thresh=opts$trans.log.thresh,
                           max.factor.levels=opts$max.factor.levels,
@@ -2352,7 +2379,7 @@ determine.plot.type.0 <- function(data, response, w, med.points.per.group,
         # in which case spurious '1's appear on the x-axis.
       } else {
         p <- gplt.scatter(data, response, indep, w=w,
-                          scatter.dedupe=opts$scatter.dedupe,
+                          depdupe.scatter=opts$depdupe.scatter,
                           min.points.jitter=opts$min.points.jitter,
                           trans.log.thresh=opts$trans.log.thresh,
                           max.factor.levels=opts$max.factor.levels,
@@ -2405,7 +2432,7 @@ determine.plot.type.1 <- function(data, response, indep, cond,
     } else {
       type.plot <- 'scatter.num'
       p <- gplt.scatter(data, indep, response, w,
-                        scatter.dedupe=opts$scatter.dedupe,
+                        depdupe.scatter=opts$depdupe.scatter,
                         min.points.jitter=opts$min.points.jitter,
                         jitter.x=opts$jitter.x,
                         jitter.y=opts$jitter.y,
@@ -2416,12 +2443,12 @@ determine.plot.type.1 <- function(data, response, indep, cond,
                         ...)
     }
   } else if (!is.numeric(data[[indep]]) && !is.numeric(data[[response]])) {
-    choices.geom <-  c('spine', 'raster', 'auto')
+    choices.geom <-  c('spine', 'heat', 'auto')
     opts.geom <- match.arg(opts$geom, choices.geom)
     if (opts.geom == 'auto') {
       opts.geom <- ifelse(length(cond) == 0 && # HACK: spine plot cannot be faceted, due to difficulty of implementation
                             length(levels(data[[response]])) <= opts$max.factor.levels.spine.y &&
-                            length(levels(data[[indep]])) <= opts$max.factor.levels.spine.x, 'spine', 'raster')
+                            length(levels(data[[indep]])) <= opts$max.factor.levels.spine.x, 'spine', 'heat')
     }
 
     if (opts.geom == 'spine') {
@@ -2435,11 +2462,11 @@ determine.plot.type.1 <- function(data, response, indep, cond,
                        verbose=opts$verbose,
                        ...)
     } else {
-       type.plot <- 'raster'
-       p <- gplt.raster(data, indep, response, z='NULL', w=w,
+       type.plot <- 'heat'
+       p <- gplt.heat(data, indep, response, z='NULL', w=w,
                         trans.log.thresh=opts$trans.log.thresh,
                         max.factor.levels=opts$max.factor.levels,
-                        raster.resolution=opts$raster.resolution,
+                        resolution.heat=opts$resolution.heat,
                         colors.gradient=opts$colors.gradient,
                         palette.brewer.seq=opts$palette.brewer.seq,
                         palette.brewer.qual=opts$palette.brewer.qual,
@@ -2504,7 +2531,7 @@ determine.plot.type.1 <- function(data, response, indep, cond,
            # not enough points for violin or box plot
            type.plot <- 'scatter.mixed'
            p <- gplt.scatter(data, var.fac, var.num, w=w,
-                             scatter.dedupe=opts$scatter.dedupe,
+                             depdupe.scatter=opts$depdupe.scatter,
                              min.points.jitter=opts$min.points.jitter,
                              trans.log.thresh=opts$trans.log.thresh,
                              max.factor.levels=opts$max.factor.levels,
@@ -2521,7 +2548,7 @@ determine.plot.type.2 <- function(data, response, indep1, indep2, w, opts,
                                   ...) {
   p <- NULL
   type.plot <- NULL
-  choices.geom <- c('spine', 'raster', 'auto')
+  choices.geom <- c('spine', 'heat', 'auto')
   opts.geom <- match.arg(opts$geom, choices.geom)
   if (opts.geom == 'auto') {
 
@@ -2529,7 +2556,7 @@ determine.plot.type.2 <- function(data, response, indep1, indep2, w, opts,
                           (!is.numeric(data[[indep2]])) &&
                           length(levels(data[[response]])) <= opts$max.factor.levels.spine.z &&
                           length(levels(data[[indep2]])) <= opts$max.factor.levels.spine.y &&
-                          length(levels(data[[indep1]])) <= opts$max.factor.levels.spine.x, 'spine', 'raster')
+                          length(levels(data[[indep1]])) <= opts$max.factor.levels.spine.x, 'spine', 'heat')
   }
 
   if (opts.geom == 'spine') {
@@ -2544,11 +2571,11 @@ determine.plot.type.2 <- function(data, response, indep1, indep2, w, opts,
                      verbose=opts$verbose,
                      ...)
   } else {
-    type.plot <- 'raster3'
-    p <- gplt.raster(data, indep1, indep2, response, w=w,
+    type.plot <- 'heat3'
+    p <- gplt.heat(data, indep1, indep2, response, w=w,
                      trans.log.thresh=opts$trans.log.thresh,
                      max.factor.levels=opts$max.factor.levels,
-                     raster.resolution=opts$raster.resolution,
+                     resolution.heat=opts$resolution.heat,
                      colors.gradient=opts$colors.gradient,
                      palette.brewer.seq=opts$palette.brewer.seq,
                      palette.brewer.qual=opts$palette.brewer.qual,
@@ -2657,7 +2684,7 @@ add.conditional.layer <- function(p, data, response, indep, cond, type.plot, opt
   preferred.order <- 'none'
   if (type.plot %in% c('density', 'histogram')) {
     preferred.order <- 'col'
-  } else if (!(type.plot %in% c('hex', 'scatter.num', 'raster'))) { # pure numeric -> no preference
+  } else if (!(type.plot %in% c('hex', 'scatter.num', 'heat'))) { # pure numeric -> no preference
     # mixed num/factor -> opposite to graph layout
     preferred.order <- ifelse(opts$prefer.factors.vert, 'row', 'col')
   }
@@ -2665,7 +2692,7 @@ add.conditional.layer <- function(p, data, response, indep, cond, type.plot, opt
   if (length(cond) == 1) {
     u <- length(unique(data[[cond]]))
 
-    if (u <= opts$max.factor.levels.color && !(type.plot %in% c('spine', 'raster', 'hex'))) {
+    if (u <= opts$max.factor.levels.color && !(type.plot %in% c('spine', 'heat', 'hex'))) {
       p <- add.color.fill(p, data, cond,
                           colors.gradient=opts$colors.gradient,
                           palette.brewer.seq=opts$palette.brewer.seq,
@@ -2863,7 +2890,7 @@ plotluck.multi <- function(response, indep, data, w='NULL',
     theme.multi <- gsub('\\s','', theme.multi)
 
     # area scale slow and hardly visible
-    opts$scatter.dedupe <- 'jitter'
+    opts$depdupe.scatter <- 'jitter'
 
     # use the limited space to make subgraphs
     # relatively rectangular

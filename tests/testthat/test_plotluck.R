@@ -57,7 +57,7 @@ test_that_ref("1d_scatter", "1D scatter num/fact", {
    # area
    eq_ref(plotluck(Petal.Length~1, iris, opts=plotluck.options(min.points.density=1E20)))
    # jitter
-   eq_ref(plotluck(Petal.Length~1, iris, opts=plotluck.options(min.points.density=1E20, scatter.dedupe='jitter')))
+   eq_ref(plotluck(Petal.Length~1, iris, opts=plotluck.options(min.points.density=1E20, dedupe.scatter='jitter')))
 })
 
 
@@ -128,7 +128,7 @@ test_that_ref("2d_box", "2D box/violin plot", {
    eq_ref(plotluck(rating~mpaa, movies, opts=plotluck.options(min.points.violin=1E20)))
 
    # with jittering
-   eq_ref(plotluck(rating~mpaa, movies, opts=plotluck.options(min.points.violin=1E20, scatter.dedupe='jitter')))
+   eq_ref(plotluck(rating~mpaa, movies, opts=plotluck.options(min.points.violin=1E20, dedupe.scatter='jitter')))
 
    # implicit conversion of binary variables
    eq_ref(plotluck(budget~Documentary, movies))
@@ -162,7 +162,7 @@ test_that_ref("3d_identity", "3D identity", {
    eq_ref(plotluck(val~f|f2, df, opts=plotluck.options(max.factor.levels.color=0)))
 })
 
-test_that_ref("3d_heat", "3D heat", {
+test_that_ref("3d_heat", "3D heat map", {
    eq_ref(plotluck(price~cut+color, diamonds))
 })
 
@@ -215,16 +215,11 @@ test_that_ref("3d_violin", "3D violin", {
 
    # scatter, color, jitter
    eq_ref(plotluck(rating~mpaa|Action, movies,
-                   opts=plotluck.options(min.points.violin=1E20, scatter.dedupe='jitter')))
+                   opts=plotluck.options(min.points.violin=1E20, dedupe.scatter='jitter')))
 
    # scatter, facets
    eq_ref(plotluck(rating~mpaa|Action, movies,
                    opts=plotluck.options(min.points.violin=1E20, max.factor.levels.color=0)))
-})
-
-test_that_ref("3d_raster", "3D raster", {
-
-   eq_ref(plotluck(price~cut+carat, diamonds))
 })
 
 
@@ -279,7 +274,7 @@ test_that_ref("2d_weight", "instance weights", {
    eq_ref(plotluck(v1~1, df, weights=w,
                    opts=plotluck.options(geom='histogram')))
 
-   # raster/spine
+   # heat map/spine
    df<-expand.grid(1:5, 1:5)
    df <- rbind(df, df, df)
    df$v <- runif(75)
