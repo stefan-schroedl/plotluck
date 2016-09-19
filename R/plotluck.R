@@ -2298,11 +2298,11 @@ plotluck <- function(formula, data, weights,
 
     if (length(cond) == 1) {
       intervals <- opts$facet.num.wrap
-      info.threshold(opts$verbose, 'Discretizing %s into intervals', opts$facet.num.wrap, cond)
+      info.threshold(opts$verbose && length(unique(data[[cond]])) > opts$facet.num.wrap, 'Discretizing %s into intervals', opts$facet.num.wrap, cond)
     } else {
       intervals <- opts$facet.num.grid
-      info.threshold(opts$verbose, 'Discretizing %s,%s into intervals', opts$facet.num.grid,
-                     cond[1], cond[2])
+      info.threshold(opts$verbose && length(unique(data[[cond[1]]])) > opts$facet.num.grid, 'Discretizing %s into intervals', opts$facet.num.wrap, cond[1])
+      info.threshold(opts$verbose && length(unique(data[[cond[2]]])) > opts$facet.num.grid, 'Discretizing %s into intervals', opts$facet.num.wrap, cond[2])
     }
 
     order.by <- NULL
@@ -3188,5 +3188,5 @@ sample.plotluck <- function(data, ...) {
   s <- do.call(paste,c(s,sep=', '))
   s <- sprintf('plotluck(%s, %s)\n', form, s)
   cat(s)
-  plotluck(as.formula(form), data, ...) + labs(title=s)
+  plotluck(as.formula(form), data, ...) + labs(title=s) + theme(plot.title=element_text(size=10))
 }
