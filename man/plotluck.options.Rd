@@ -2,26 +2,64 @@
 % Please edit documentation in R/plotluck.R
 \name{plotluck.options}
 \alias{plotluck.options}
-\title{Create OP options structure for \code{plotluck}}
+\title{Create options structure for \code{plotluck}}
 \usage{
 plotluck.options(opts, ...)
 }
 \arguments{
-\item{...}{parameters to override default settings}
+\item{opts}{An (optional) named list to start with. Anything not specified in ... will be inherited from opts.}
+
+\item{...}{Parameters to override default settings}
 }
 \value{
-a named list of options, usable by function \code{plotluck}
+A named list of options, usable as argument to function \code{\link{plotluck}}.
 
  \code{plotluck} accepts a list of options to modify its behavior. Calling
  \code{plotluck.options} without arguments produces a list with the default
- values. Specifying any number of attribute/value pairs overrides these
- values selectively.
+ values. Specifying any number of attribute/value pairs overrides them
+ selectively.
 
- Available options and their meaning is described inline in the documentation
- of \code{link{plotluck}}.
+\tabular{lll}{
+\strong{Option}\tab\strong{Default}\tab\strong{Comment}\cr
+\code{na.rm} \tab \code{FALSE} \tab Do not show missing factor values as separate level.\cr
+\code{geom} \tab \code{"auto"} \tab Override type of plot; the available types for a given formula and variables can be inspected with \code{verbose=TRUE}.\cr
+\code{sample.max.rows} \tab \code{100000} \tab If the data set has more rows than that, sample it down.\cr
+\code{trans.log.thresh} \tab \code{2} \tab Threshold for logarithmic axis scaling. Visible magnification factor of the central region of the distribution.\cr
+\code{n.breaks.histogram} \tab \code{NA} \tab Override the number of histogram breaks.\cr
+\code{min.points.hex} \tab \code{5000} \tab Minimum data points required to display a hexbin plot.\cr
+\code{min.points.density} \tab \code{20} \tab Minimum data points required to display a density or histogram plot.\cr
+\code{min.points.violin} \tab \code{20} \tab Minimum data points required to display a violin or box plot.\cr
+\code{resolution.heat} \tab \code{30} \tab Grid spacing for heat maps.\cr
+\code{dedupe.scatter} \tab \code{'area'} \tab To represent multiple instances of the same coordinates in scatter plot: scale the point size, or use jitter?\cr
+\code{min.points.jitter} \tab \code{3} \tab Minimum number of coordinate duplicates to start jittering points.\cr
+\code{jitter.x} \tab \code{0.4} \tab Amount of jitter to apply in horizontal direction, as a fraction of resolution.\cr
+\code{jitter.y} \tab \code{0.4} \tab  Amount of jitter to apply in vertical direction, as a fraction of resolution.\cr
+\code{few.unique.as.factor} \tab \code{5} \tab If a numeric variable has less than that many unique values, make it an ordered factor.\cr
+\code{max.factor.levels} \tab \code{30} \tab For factors with more than that many levels, least frequent ones will be pruned into "other".\cr
+\code{max.factor.levels.color} \tab \code{3} \tab Maximum number of factor levels that can be represented as colors in the same plot.\cr
+\code{max.factor.levels.violin} \tab \code{20} \tab Maximum number of levels to plot violins; rather switch to box plot. \cr
+\code{max.factor.levels.spine.x} \tab \code{20} \tab Maximum number of levels to plot in x-direction in a spine plot. \cr
+\code{max.factor.levels.spine.y} \tab \code{10} \tab Maximum number of levels to plot in y-direction in a spine plot. \cr
+\code{max.factor.levels.spine.z} \tab \code{5} \tab Maximum number of levels to represent as colors in a spine plot. \cr
+\code{spine.plot.margin.x} \tab \code{0.05} \tab Horizontal gap between rectangles in a spine plot. \cr
+\code{spine.plot.margin.y} \tab \code{0.02} \tab Vertical gap between rectangles in a spine plot. \cr
+\code{facet.max.cols} \tab \code{10} \tab Maximum number of facet columns for conditional variables. \cr
+\code{facet.max.rows} \tab \code{10} \tab Maximum number of facet rows for conditional variables. \cr
+\code{facet.num.wrap} \tab \code{6} \tab Preferred number of facets for single conditional variable. \cr
+\code{facet.num.grid} \tab \code{3} \tab Preferred number of facets for each of two conditional variables. \cr
+\code{prefer.factors.vert} \tab \code{TRUE} \tab In mixed numeric/factor plots, use vertical axis for the factor. \cr
+\code{fill.default} \tab \code{"deepskyblue"} \tab Default fill color for density and histogram plots. \cr
+\code{colors.gradient} \tab \code{c(hcl(66,60,85),hcl(128,100,45))} \tab Gradient colors for numeric and ordered variables. \cr
+\code{palette.brewer.seq} \tab \code{"YlGn"} \tab Sequential brewer palette name. \cr
+\code{palette.brewer.qual} \tab \code{"Set1"} \tab Qualitative brewer palette name. \cr
+\code{multi.entropy.order} \tab \code{TRUE} \tab Use estimated conditional entropy to order multi-plots. \cr
+\code{multi.max.rows} \tab \code{6} \tab Maximum number of rows for multi-plots. \cr
+\code{multi.max.cols} \tab \code{6} \tab Maximum number of columns for multi-plots. \cr
+\code{multi.in.grid} \tab \code{TRUE} \tab In multi-plots, make a page with multiple plots, or generate each one separately. \cr
+\code{verbose} \tab \code{FALSE}\tab Print information about plot types, ordering, scaling, etc. \cr}
 }
 \description{
-Create OP options structure for \code{plotluck}
+Create options structure for \code{plotluck}
 }
 \note{
 \code{plotluck}'s aim is to provide a function that is usable
@@ -29,31 +67,16 @@ Create OP options structure for \code{plotluck}
  yourself needing to change option values repeatedly or find the presets to
  be suboptimal, please contact the author.
 }
-\section{Shortcut options}{
-
-\itemize{
-\item By default, hex, density, box, and violin plots revert to
-scatter plots for low number of points. \code{prefer.scatter=FALSE} (resp.
-\code{TRUE}) sets \code{min.points.hex}, \code{min.points.density}, and
-\code{min.points.box} to zero (resp. \code{Inf}).
-\item If variable \code{z} is specified and the plot type, as well as its
-number of levels, allows it, coloring is used to for representation in a single
-plot; otherwise, \code{plotluck} reverts to faceting. Users can influence this
-behavior by setting \code{prefer.color.for.z=TRUE} (resp. \code{FALSE}), which
-causes \code{max.colors.scatter}, \code{max.colors.density},
-\code{max.colors.box}, and \code{max.colors.bar} to be \code{Inf} (resp. 0).
-}
-}
 \examples{
 # list all default options
 plotluck.options()
 
 data(iris)
 # default with violin plot
-plotluck(iris, Species, Petal.Length)
+plotluck(Petal.Length~Species, iris)
 
 # use box-and-whiskers plot instead
-plotluck(iris, Species, Petal.Length, opts=plotluck.options(use.geom.violin=FALSE))
+plotluck(Petal.Length~Species, iris, opts=plotluck.options(geom='box'))
 
 }
 \seealso{

@@ -1,5 +1,5 @@
 Package: plotluck
-Title: GGPlot2 version of 'I'm Feeling Lucky!'
+Title: GGPlot2 Version of 'I'm Feeling Lucky!'
 Version: 1.0
 Authors@R: "Stefan Schroedl <stefan.schroedl@gmx.de> [aut, cre]"
 Author: Stefan Schroedl <stefan.schroedl@gmx.de>
@@ -27,5 +27,9 @@ Suggests:
     testthat,
     ggplot2movies,
     mgcv,
-    nlme
+    nlme,
+    knitr,
+    rmarkdown,
+    gapminder
 RoxygenNote: 5.0.1
+VignetteBuilder: knitr

@@ -1,0 +1,9 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.RData$
+^\.Rhistory$
+^\.gitignore$
+^tests/testthat/.Rapp.history$
+^.Rproj.user$
+^.git$$
+^cran-comments.md$
