@@ -4,7 +4,13 @@ output: github_document
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-
+```{r, echo = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "README-"
+)
+```
 
 # GGPlot2 version of "I'm Feeling Lucky!"
 
@@ -30,14 +36,11 @@ Imagine you have given a new R data frame, and would like to get an overview of 
 
 ## Example
 
-
-```r
+```{r, fig.show='hold'}
 library(plotluck)
 data(diamonds,package='ggplot2')
 plotluck(price~cut+color, diamonds)
 ```
-
-![plot of chunk unnamed-chunk-2](README-unnamed-chunk-2-1.png)
 
 ## Features
 

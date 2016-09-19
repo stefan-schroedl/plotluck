@@ -7,3 +7,6 @@
 ^.Rproj.user$
 ^.git$$
 ^cran-comments.md$
+^NEWS\.md$
+^README\.Rmd$
+^README-.*\.png$
