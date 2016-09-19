@@ -1403,7 +1403,7 @@ gplt.violin <- function(data, x, y, w='NULL',
    if ('.center.' %in% names(data)) {
       # dodge does not work correctly when width is not specified
       # see https://github.com/hadley/ggplot2/issues/525
-      p <- p + geom_point(mapping=aes(y=.center.),
+      p <- p + geom_point(mapping=aes_(y=~.center.),
                           position=position_dodge(width=0.9),
                           size=2, shape=1, na.rm=TRUE)
    }
@@ -1487,7 +1487,7 @@ gplt.density <- function(data, x, w='NULL',
    }
 
    p <- ggplot(data, aes_string(x=x, weight=w)) +
-      geom_density(aes(y=..scaled..), alpha=0.6, adjust=0.5, trim=TRUE, na.rm=TRUE, ...) +
+      geom_density(aes_(y=~..scaled..), alpha=0.6, adjust=0.5, trim=TRUE, na.rm=TRUE, ...) +
       geom_rug(na.rm=TRUE) +
       geom_vline_center()
 
@@ -1600,7 +1600,7 @@ gplt.spine <- function(data, x, y, w='NULL',
   #idx <- plot.data$bottom < plot.data$top & plot.data$left < plot.data$right
   #plot.data <- plot.data[idx,]
 
-  p <- ggplot(plot.data, aes(xmin=left, xmax=right, ymin=bottom, ymax=top)) +
+  p <- ggplot(plot.data, aes_(xmin=~left, xmax=~right, ymin=~bottom, ymax=~top)) +
     # make outline color same as fill color - black outline will hide colors
     # for very narrow stripes
     geom_rect(aes_string(color=y, fill=y), size=1, alpha=0.6, na.rm=TRUE, ...) +
@@ -1689,7 +1689,7 @@ gplt.spine3 <- function(data, x, y, z, w='NULL',
   plot.data$bottom   <- plot.data$y.cond.cum + plot.data$y.cnt * plot.margin.y
   plot.data$top      <- plot.data$bottom     + plot.data$y.cond
 
-  p <- ggplot(plot.data, aes(xmin=left, xmax=right, ymin=bottom, ymax=top)) +
+  p <- ggplot(plot.data, aes_(xmin=~left, xmax=~right, ymin=~bottom, ymax=~top)) +
     # make outline color same as fill color - black outline will hide colors
     # for very narrow stripes
     # size=1: make sure empty rects are still visible
@@ -1718,7 +1718,7 @@ gplt.spine3 <- function(data, x, y, z, w='NULL',
 
 # blank plot with optional message text
 gplt.blank <- function(text=NULL, ...) {
-  p <- ggplot(data.frame(x=c(0,1), y=c(0,1)), aes(x=x, y=y)) +
+  p <- ggplot(data.frame(x=c(0,1), y=c(0,1)), aes_(x=~x, y=~y)) +
     geom_blank(...) +
     labs(x=NULL, y=NULL) +
     xlim(0,1) +
