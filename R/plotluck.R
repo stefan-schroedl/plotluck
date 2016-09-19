@@ -217,7 +217,7 @@ group.central <- function(data, x, group.vars, w='NULL', method=c('median', 'mea
     data[[x]] <- as.integer(data[[x]])
   }
 
-  if (w == 'NULL') {
+  if (w == 'NULL' || length(unique(data[[w]])) == 1) {
     if (is.num || is.ord) {
       fun <- ifelse(method=='median', median, mean)
       grp.center <- plyr::ddply(data, group.vars, function(d) fun(d[[x]], na.rm=TRUE))
@@ -380,7 +380,7 @@ limit.factor.levels <- function(data, x, w='NULL',
   if (u <= tol) {
     return(data)
   }
-  warning(sprintf('Factor variable %s has too many levels (%d), truncating to %d', x, u, max.levels))
+  message(sprintf('Factor variable %s has too many levels (%d), truncating to %d', x, u, max.levels))
 
   if (!is.ordered(x.data)) {
     ord <- seq(length(levels(x.data)))
@@ -609,7 +609,7 @@ preprocess.factors <- function(data, vars, na.rm=FALSE) {
     factor.with.na.level <- any(sapply(seq(length(data)),
                                        function(x) {is.factor(data[[x]]) && any(is.na(levels(data[[x]])))}))
     if (factor.with.na.level) {
-      warning('Option "na.rm=TRUE", but data contains factor(s) with an NA level. Keeping these ...')
+      message('Option "na.rm=TRUE", but data contains factor(s) with an NA level. Keeping these ...')
     }
     data <- na.omit(data)
 
@@ -947,17 +947,78 @@ add.axis.transform <- function(p, data, x, ax=c('x','y'), trans.log.thresh=2, ve
   }
 }
 
+
+StatCenterX <- ggproto("StatCenterX", Stat,
+                       required_aes = c("x","y"),
+                       default_aes = aes(xintercept = ..x..),
+
+                       setup_params = function(data, params) {
+                          if (is.null(params$weight)) {
+                             params$weight <- 1
+                          }
+                          params
+                       },
+
+                       compute_group = function(data, scales, weight) {
+                          data <- group.central(data, 'x', c('group','PANEL'), w='weight', method='median', col.name='x')
+                          data
+                       }
+)
+
+StatCenterY <- ggproto("StatCenterY", Stat,
+                      required_aes = c("y", "group"),
+
+                      setup_params = function(data, params) {
+                         if (is.null(params$weight)) {
+                            params$weight <- 1
+                         }
+                         params
+                      },
+
+                      compute_group = function(data, scales, weight) {
+                         data <- group.central(data, 'y', c('group','PANEL'), w='weight', method='median', col.name='y')
+                         data$x <- data$group
+                         data
+                      }
+)
+
+geom_point_center <- function(mapping = NULL, data = NULL,
+                              position = position_dodge(width=0.9),
+                              shape = 1, color = "black", size = 2, fill = NA,  alpha = NA,
+                              show.legend = NA, inherit.aes = TRUE, na.rm = TRUE, ...)
+{
+   layer(data = data, mapping = mapping, stat = StatCenterY, geom = GeomPoint,
+         position = position, show.legend = show.legend, inherit.aes = inherit.aes,
+         params = list(shape=shape, color=color, size=size, fill=fill, alpha=alpha,
+                       na.rm = na.rm, ...))
+}
+
+# different from base geom_vline(), adapt color according to group, because of inherit.aes=TRUE
+geom_vline_center <- function(mapping = NULL, data = NULL,
+                              position = 'identity',
+                              color = NULL, size = 0.7, alpha = NA,
+                              linetype='dashed',
+                              show.legend = NA, inherit.aes = TRUE, na.rm = TRUE, ...)
+{
+   layer(data = data, mapping = mapping, stat = StatCenterX, geom = GeomVline,
+         position = position, show.legend = show.legend, inherit.aes = inherit.aes,
+         params = list(size=size, alpha=alpha, linetype=linetype,
+                       na.rm = na.rm, ...))
+}
+
+
+
 # 2D scatter plot of numeric or factor variables
 # - overlay smoothing line if both variables are numeric
-# - depdupe.scatter='area' - unique repeated points, count frequency
-# - depdupe.scatter='jitter' - plot each repeated point separately, add
+# - dedupe.scatter='area' - unique repeated points, count frequency
+# - dedupe.scatter='jitter' - plot each repeated point separately, add
 #   jitter if there are more than min.points.jitter with identical coordinates
 # - counts/weights are drawn with a shaded circle of proportional area
 # - jitter.x, jitter.y - the amount of jittering as a multiple of resolution
 # - trans.log.thresh - threshold to decide on log-transform
 # - fill.smooth - fill color for smoothing line
 gplt.scatter <- function(data, x, y, w='NULL',
-                         depdupe.scatter=c('area','jitter'),
+                         dedupe.scatter=c('area','jitter'),
                          min.points.jitter=3,
                          jitter.x=0.4,
                          jitter.y=0.4,
@@ -967,7 +1028,7 @@ gplt.scatter <- function(data, x, y, w='NULL',
                          verbose=FALSE,
                          ...) {
 
-  depdupe.scatter <- match.arg(depdupe.scatter)
+  dedupe.scatter <- match.arg(dedupe.scatter)
   flip <- FALSE
   if (is.numeric(data[[x]]) && (!is.numeric(data[[y]]))) {
     # HACK: ggplot2 does not implement vertical dodging, therefore we
@@ -989,7 +1050,7 @@ gplt.scatter <- function(data, x, y, w='NULL',
                                 max.levels=max.factor.levels)
   }
 
-  if (depdupe.scatter == 'area') {
+  if (dedupe.scatter == 'area') {
     # record frequency/total weight for each unique row of the data
     if (w == 'NULL') {
       # equivalent to 'uniq -c'
@@ -1314,53 +1375,58 @@ gplt.violin <- function(data, x, y, w='NULL',
                         verbose=FALSE,
                         ...) {
 
-  flip <- FALSE
-  if (is.numeric(data[[x]])) {
-    if (is.numeric(data[[y]])) {
-      stop('Violin plot requires one factor variable')
-    }
-    flip <- TRUE
-    tmp <- x
-    x <- y
-    y <- tmp
-  }
-  # note: geom_violin throws an error if all values are equal
-  # workaround: add very small jitter
-  data[[y]] <- data[[y]] +
-    1E-8 * min(data[[y]], na.rm=TRUE) * (runif(nrow(data)) - 0.5)
+   flip <- FALSE
+   if (is.numeric(data[[x]])) {
+      if (is.numeric(data[[y]])) {
+         stop('Violin plot requires one factor variable')
+      }
+      flip <- TRUE
+      tmp <- x
+      x <- y
+      y <- tmp
+   }
+   # note: geom_violin throws an error if all values are equal
+   # workaround: add very small jitter
+   data[[y]] <- data[[y]] +
+      1E-8 * min(data[[y]], na.rm=TRUE) * (runif(nrow(data)) - 0.5)
 
-  if (!is.ordered(data[[x]])) {
-    data <- order.factor.by.value(data, x, y, w=w, verbose=verbose)
-  }
+   if (!is.ordered(data[[x]])) {
+      data <- order.factor.by.value(data, x, y, w=w, verbose=verbose)
+   }
 
-  data <- limit.factor.levels(data, x, w=w,
-                              max.levels=max.factor.levels)
+   data <- limit.factor.levels(data, x, w=w,
+                               max.levels=max.factor.levels)
 
-  p <- ggplot(data, aes_string(x=x, y=y, weight=w, ymax=max(y,na.rm=TRUE))) +
-    geom_violin(scale='width', alpha=0.8, na.rm=TRUE, ...)
+   p <- ggplot(data, aes_string(x=x, y=y, weight=w, ymax=max(y,na.rm=TRUE))) +
+      geom_violin(scale='width', alpha=0.8, na.rm=TRUE, ...)
 
-  if ('.center.' %in% names(data)) {
-    # dodge does not work correctly when width is not specified
-    # see https://github.com/hadley/ggplot2/issues/525
-    p <- p + geom_point(mapping=aes(y=.center.),
-                        position=position_dodge(width=0.9),
-                        size=2, shape=1, na.rm=TRUE)
-  }
+   if ('.center.' %in% names(data)) {
+      # dodge does not work correctly when width is not specified
+      # see https://github.com/hadley/ggplot2/issues/525
+      p <- p + geom_point(mapping=aes(y=.center.),
+                          position=position_dodge(width=0.9),
+                          size=2, shape=1, na.rm=TRUE)
+   }
 
-  # axis transformation
-  p <- add.axis.transform(p, data, y, 'y', trans.log.thresh, verbose=verbose)
+   # '+ geom_point_center()' is unfortunately not working correctly for the case that a
+   # group (y-value) AND a color is specified, e.g.,
+   # plotluck(Petal.Length~Species|Petal.Width,iris,opts=plotluck.options(geom='violin',max.factor.levels.color=10))
+   # In this case, compute_group() in StatCenterX is only called once per y-value.
 
-  if (!flip) {
-    p <- p + theme_panel_fac_x + theme_panel_num_y
+   # axis transformation
+   p <- add.axis.transform(p, data, y, 'y', trans.log.thresh, verbose=verbose)
 
-    if (estimate.label.overlap(levels(data[[x]]))) {
-      p <- p + theme_slanted_text_x
-    }
+   if (!flip) {
+      p <- p + theme_panel_fac_x + theme_panel_num_y
 
-  } else {
-    p <- p + coord_flip() + theme_panel_fac_y + theme_panel_num_x
-  }
-  p
+      if (estimate.label.overlap(levels(data[[x]]))) {
+         p <- p + theme_slanted_text_x
+      }
+
+   } else {
+      p <- p + coord_flip() + theme_panel_fac_y + theme_panel_num_x
+   }
+   p
 }
 
 
@@ -1422,15 +1488,8 @@ gplt.density <- function(data, x, w='NULL',
 
    p <- ggplot(data, aes_string(x=x, weight=w)) +
       geom_density(aes(y=..scaled..), alpha=0.6, adjust=0.5, trim=TRUE, na.rm=TRUE, ...) +
-      geom_rug(na.rm=TRUE)
-
-   # geom_vline cannot be used, see https://github.com/hadley/ggplot2/issues/426
-   # .center. explicitly precomputed before
-   # known issue: color cannot be set here, dependent on conditional layer
-   # (does not automatically inherit)
-   if ('.center.' %in% names(data)) {
-      p <- p + geom_vline(aes(xintercept=.center.), linetype='dashed', size=0.7, na.rm=TRUE)
-   }
+      geom_rug(na.rm=TRUE) +
+      geom_vline_center()
 
    # axis transformation
    p <- add.axis.transform(p, data, x, 'x', trans.log.thresh, verbose=verbose) +
@@ -1456,11 +1515,7 @@ gplt.histogram <- function(data, x, w='NULL',
   bin.width <- diff(range(data[[x]], na.rm=TRUE))/n.breaks
   p <- ggplot(data, aes_string(x=x, weight=w)) +
     geom_histogram(binwidth=bin.width, position='identity', alpha=0.6, na.rm=TRUE, ...) +
-    geom_rug(na.rm=TRUE)
-
-  if ('.center.' %in% names(data)) {
-    p <- p + geom_vline(aes(xintercept=.center.), linetype='dashed', size=0.7, na.rm=TRUE)
-  }
+    geom_rug(na.rm=TRUE) + geom_vline_center()
 
   # axis transformation
   p <- add.axis.transform(p, data, x, 'x', trans.log.thresh, verbose=verbose)
@@ -1703,7 +1758,7 @@ gplt.blank <- function(text=NULL, ...) {
 #' \code{min.points.density} \tab \code{20} \tab Minimum data points required to display a density or histogram plot.\cr
 #' \code{min.points.violin} \tab \code{20} \tab Minimum data points required to display a violin or box plot.\cr
 #' \code{resolution.heat} \tab \code{30} \tab Grid spacing for heat maps.\cr
-#' \code{depdupe.scatter} \tab \code{'area'} \tab To represent multiple instances of the same coordinates in scatter plot: scale the point size, or use jitter?\cr
+#' \code{dedupe.scatter} \tab \code{'area'} \tab To represent multiple instances of the same coordinates in scatter plot: scale the point size, or use jitter?\cr
 #' \code{min.points.jitter} \tab \code{3} \tab Minimum number of coordinate duplicates to start jittering points.\cr
 #' \code{jitter.x} \tab \code{0.4} \tab Amount of jitter to apply in horizontal direction, as a fraction of resolution.\cr
 #' \code{jitter.y} \tab \code{0.4} \tab  Amount of jitter to apply in vertical direction, as a fraction of resolution.\cr
@@ -1766,7 +1821,7 @@ plotluck.options <- function(opts,...) {
       jitter.x=0.4,
       jitter.y=0.4,
       resolution.heat=30,
-      depdupe.scatter='area',
+      dedupe.scatter='area',
       few.unique.as.factor=5,
       max.factor.levels=30,
       max.factor.levels.color=3,
@@ -1804,7 +1859,6 @@ plotluck.options <- function(opts,...) {
 sample.data <- function(data, w='NULL', max.rows) {
   n.row <- nrow(data)
   if (n.row > max.rows) {
-    #warning(sprintf('Data set has %d rows, sampling down to %d rows', n.row, max.rows))
     if (w == 'NULL') {
       data <- data[sample(1:n.row, max.rows),, drop=FALSE]
     } else {
@@ -1905,7 +1959,7 @@ process.weights <- function(data, weights) {
   }
   weight.na <- is.na(data[[weights]])
   if  (any(weight.na)) {
-    warning('Weight is NA for %d instances, deleting', length(which(weight.na)))
+    message('Weight is NA for %d instances, deleting', length(which(weight.na)))
     data <- data[!weight.na,]
   }
   # if weights are integer type, Hmisc::wtd.quantile() can lead to NA due to overflow
@@ -2007,6 +2061,9 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #'   be customized with \code{n.breaks.histogram}. The default setting, \code{NA},
 #'   applies a heuristic estimate.
 #'
+#'   The case of a response two dependent variables (`y~x+z`) is covered by
+#'   either a spine plot (if all are factors) or a heat map.
+#'
 #'   In many cases with few points for one of the aggregate plots, a scatter
 #'   looks better (options \code{min.points.density}, \code{min.points.violin},
 #'   \code{min.points.hex}).
@@ -2032,7 +2089,7 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #'  or frequency counts for each row of data. All plots and summary statistics
 #'  take weights into account when supplied. In scatter and heat maps, weights
 #'  are indicated either by a shaded disk with proportional area (default) or by
-#'  jittering (option \code{depdupe.scatter}), if the number of duplicated points
+#'  jittering (option \code{dedupe.scatter}), if the number of duplicated points
 #'  exceeds \code{min.points.jitter}. The amount of jittering can be controlled
 #'  with \code{jitter.x} and \code{jitter.y}.
 #'
@@ -2260,6 +2317,7 @@ plotluck <- function(formula, data, weights,
       if (is.numeric(data[[cond[i]]])) {
         data <- discretize(data, cond[i], w=weights, max.breaks=intervals,
                            estimate.breaks=FALSE, method='histogram')
+        data[[cond[i]]] <- ordered(data[[cond[i]]])
       } else {
         data <- limit.factor.levels(data, cond[i], w=weights,
                                     max.levels=intervals)
@@ -2295,8 +2353,8 @@ plotluck <- function(formula, data, weights,
 
   # precompute medians
   if (length(vars.numeric) == 1) {
-    grp.med <- group.central(data, vars.numeric, vars.non.numeric, w=weights, method='median')
-    data <- merge(data, grp.med)
+     grp.med <- group.central(data, vars.numeric, vars.non.numeric, w=weights, method='median')
+     data <- merge(data, grp.med)
   }
 
   # note: factor levels cannot be limited before ordering is known!
@@ -2366,7 +2424,7 @@ determine.plot.type.0 <- function(data, response, w, med.points.per.group,
       type.plot <- 'scatter.num.1'
       if (!opts$prefer.factors.vert) {
         p <- gplt.scatter(data, indep, response, w=w,
-                          depdupe.scatter=opts$depdupe.scatter,
+                          dedupe.scatter=opts$dedupe.scatter,
                           min.points.jitter=opts$min.points.jitter,
                           trans.log.thresh=opts$trans.log.thresh,
                           max.factor.levels=opts$max.factor.levels,
@@ -2379,7 +2437,7 @@ determine.plot.type.0 <- function(data, response, w, med.points.per.group,
         # in which case spurious '1's appear on the x-axis.
       } else {
         p <- gplt.scatter(data, response, indep, w=w,
-                          depdupe.scatter=opts$depdupe.scatter,
+                          dedupe.scatter=opts$dedupe.scatter,
                           min.points.jitter=opts$min.points.jitter,
                           trans.log.thresh=opts$trans.log.thresh,
                           max.factor.levels=opts$max.factor.levels,
@@ -2432,7 +2490,7 @@ determine.plot.type.1 <- function(data, response, indep, cond,
     } else {
       type.plot <- 'scatter.num'
       p <- gplt.scatter(data, indep, response, w,
-                        depdupe.scatter=opts$depdupe.scatter,
+                        dedupe.scatter=opts$dedupe.scatter,
                         min.points.jitter=opts$min.points.jitter,
                         jitter.x=opts$jitter.x,
                         jitter.y=opts$jitter.y,
@@ -2531,7 +2589,7 @@ determine.plot.type.1 <- function(data, response, indep, cond,
            # not enough points for violin or box plot
            type.plot <- 'scatter.mixed'
            p <- gplt.scatter(data, var.fac, var.num, w=w,
-                             depdupe.scatter=opts$depdupe.scatter,
+                             dedupe.scatter=opts$dedupe.scatter,
                              min.points.jitter=opts$min.points.jitter,
                              trans.log.thresh=opts$trans.log.thresh,
                              max.factor.levels=opts$max.factor.levels,
@@ -2890,7 +2948,7 @@ plotluck.multi <- function(response, indep, data, w='NULL',
     theme.multi <- gsub('\\s','', theme.multi)
 
     # area scale slow and hardly visible
-    opts$depdupe.scatter <- 'jitter'
+    opts$dedupe.scatter <- 'jitter'
 
     # use the limited space to make subgraphs
     # relatively rectangular
@@ -3053,7 +3111,7 @@ print.plotluck_multi <- function(x, ...) {
 #' \code{sample.plotluck} samples a formula as follows:
 #' \itemize{
 #' \item Uniformly draw the number of variables (1-3).
-#' \item For each variable, uniformly choose one of the existing types (numeric, ordered or unordered factor).
+#' \item For each variable, uniformly choose one of the existing variable types from the data set (numeric, ordered or unordered factor).
 #' \item Uniformly select one of the data frame columns of that type.
 #'}
 #'
