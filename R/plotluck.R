@@ -125,7 +125,7 @@ log_mod_trans <- function(base = exp(1), offset=0)
 get.trans.fun <- function(data, x, expansion.thresh=2, label=x, verbose=FALSE) {
 
   if (!is.numeric(data[[x]]) ||
-      length(unique(data[[x]])) <= 2) {
+      length(unique(data[[x]])) <= 3) {
     return(list(scales::identity_trans(), label))
   }
 
@@ -159,9 +159,13 @@ get.trans.fun <- function(data, x, expansion.thresh=2, label=x, verbose=FALSE) {
 
   fun.trans <- log_mod_trans(base=10, offset=offset)
 
-  range.core.after     <- fun.trans$trans(range.core)
-  range.complete.after <- fun.trans$trans(range.complete)
-  ratio.after          <- diff(range.core.after) / diff(range.complete.after)
+  if (ratio.before == 0) {
+     ratio.after <- 1
+  } else {
+     range.core.after     <- fun.trans$trans(range.core)
+     range.complete.after <- fun.trans$trans(range.complete)
+     ratio.after          <- diff(range.core.after) / diff(range.complete.after)
+  }
   if (verbose) {
     if (ratio.after <= expansion.thresh * ratio.before) {
       cat(sprintf('Not applying logarithmic axis scaling for %s; expansion ratio is %f, trans.log.thresh = %f\n',
@@ -222,6 +226,8 @@ group.central <- function(data, x, group.vars, w='NULL', method=c('median', 'mea
       fun <- ifelse(method=='median', median, mean)
       grp.center <- plyr::ddply(data, group.vars, function(d) fun(d[[x]], na.rm=TRUE))
     } else {
+      # known issue: for ordering, it would be better to take also the frequency of the mode
+      # into account
       grp.center <- plyr::ddply(data, group.vars, function(d) Mode(d[[x]]))
     }
   } else {
@@ -290,7 +296,7 @@ order.factor.by.freq <- function(data, x, w='NULL', decreasing=FALSE, verbose=FA
 order.factor.by.value <- function(data, x, y, w='NULL', decreasing=FALSE, verbose=FALSE) {
 
   x.data <- data[[x]]
-  if (is.numeric(x.data) || is.ordered(x.data)) {
+  if (is.numeric(x.data) || is.ordered(x.data) || length(unique(data[[x]])) == 1) {
     # do not change ordered factors
     return(data)
   }
@@ -426,7 +432,7 @@ limit.factor.levels <- function(data, x, w='NULL',
     # make lists of elements, e.g.:
     #  - original levels 'a', 'b', 'c', 'd'
     #  - binned level '[2,4)' ->  'c,d'
-    x.data <- as.factor(x.data)
+    x.data <- ordered(x.data)
 
     reconstruct.levels <- function(interval, levels) {
       left.bracket <- substr(interval,1,1)
@@ -766,18 +772,62 @@ theme_slanted_text_x <- theme(axis.text.x=element_text(angle=-45, hjust=0, vjust
 
 # detect if x axis text might overlap
 estimate.label.overlap <- function(labels, breaks=seq(length(labels))) {
-  if (length(breaks) < 2) {
-    return(FALSE)
-  }
-  rg <- breaks[length(breaks)] - breaks[1]
-  for (i in seq(length(breaks)-1)) {
-    space <- (breaks[i+1] - breaks[i]) / rg
-    label.width <- as.numeric(grid::convertX(unit(1, 'strwidth', labels[i]),'npc'))
-    if (label.width > space) {
-      return(TRUE)
-    }
-  }
-  return(FALSE)
+   if (length(breaks) < 2) {
+      return(FALSE)
+   }
+   lb <- length(breaks)
+
+   # account for some empty space at the boundaries
+   mrg.left <- (breaks[2]-breaks[1])/2
+   mrg.right <- (breaks[lb]-breaks[lb-1])/2
+   rg <- breaks[lb] - breaks[1] + mrg.left + mrg.right
+
+   for (i in seq(lb)) {
+      space.left  <- ifelse(i==1,  2*mrg.left,  (breaks[i]-breaks[i-1]))/rg
+      space.right <- ifelse(i==lb, 2*mrg.right, (breaks[i+1]-breaks[i]))/rg
+      label.width <- as.numeric(grid::convertX(unit(1, 'strwidth', labels[i]),'npc'))
+      if (label.width > min(space.left, space.right)) {
+         return(TRUE)
+      }
+   }
+   return(FALSE)
+}
+
+get.palette <- function(x, palette.brewer.seq='YlGn', palette.brewer.qual='Set1',
+                        adjust.size=FALSE) {
+
+   is.num <- is.numeric(x)
+   is.ord <- is.ordered(x)
+   u <- length(unique(x))
+   if (u <= 2) {
+      # treat as qualitative
+      is.ord <- FALSE
+      is.num <- FALSE
+   }
+   name <- ifelse(is.num || is.ord, palette.brewer.seq, palette.brewer.qual)
+
+   sz <- RColorBrewer::brewer.pal.info[name, 'maxcolors']
+   if (is.na(sz)) {
+      stop('invalid palette name: ', name)
+   }
+
+   pal <- RColorBrewer::brewer.pal(sz, name)
+
+   if (adjust.size) {
+      if ((is.num || is.ord) && u < sz) {
+         # note: the first few colors of the brewer palettes are very light, sometimes
+         # hard to see. If less values are needed than the palette size, we want to
+         # rather drop the lightest ones instead of the darkest ones.
+         pal <- pal[seq(sz-u+1, sz)]
+      }
+      if ((!is.num) && u > sz) {
+         # not enough colors, interpolate
+         # note: maybe do something different for qualitative scale?
+         pal <- colorRampPalette(pal)(u)
+      }
+      names(pal) <- levels(x)
+   }
+   pal
 }
 
 # add color and/or fill scale layers to plot
@@ -788,63 +838,37 @@ estimate.label.overlap <- function(labels, breaks=seq(length(labels))) {
 # - if too few colors, use default (first two colors of brewer palette might not look good by themselves!)
 
 add.color.fill <- function(p, data, x, aesth=c('color', 'fill'),
-                           colors.gradient=c(hcl(66,60,85), hcl(128,100,45)),
                            palette.brewer.seq='YlGn',
                            palette.brewer.qual='Set1') {
 
-  na.value <- 'darkgray'
-  if ('color' %in% aesth) {
-    p <- p + aes_string(color=x)
-  }
-  if ('fill' %in% aesth) {
-    p <- p + aes_string(fill=x)
-  }
-  if (length(unique(data[[x]])) <= 2) {
-    # just use default
-  } else if (is.numeric(data[[x]])) {
-    if ('color' %in% aesth) {
-      p <- p + scale_color_gradientn(colors=colors.gradient)
-    }
-    if ('fill' %in% aesth) {
-      p <- p + scale_fill_gradientn(colors=colors.gradient)
-    }
-  } else if (is.ordered(data[[x]])) {
-    if (length(levels(data[[x]])) <= 8) {
+   na.value <- 'darkgray'
+   if ('color' %in% aesth) {
+      p <- p + aes_string(color=x)
+   }
+   if ('fill' %in% aesth) {
+      p <- p + aes_string(fill=x)
+   }
+
+   pal <- get.palette(data[[x]], palette.brewer.seq, palette.brewer.qual, TRUE)
+   lp <- length(pal)
+
+   if (is.numeric(data[[x]])) {
       if ('color' %in% aesth) {
-        p <- p + scale_color_brewer(palette=palette.brewer.seq, na.value=na.value)
+         p <- p + scale_color_gradientn(colors=pal[c(1,lp)])
       }
       if ('fill' %in% aesth) {
-        p <- p + scale_fill_brewer(palette=palette.brewer.seq, na.value=na.value)
+         p <- p + scale_fill_gradientn(colors=pal[c(1,lp)])
       }
-    } else { # length(levels(data[[x]])) > 8
-      pal <- colorRampPalette(colors.gradient)(length(levels(data[[x]])))
-      names(pal) <- levels(data[[x]])
+   } else { # !is.num
+
       if ('color' %in% aesth) {
-        p <- p + scale_color_manual(values=pal, na.value=na.value)
+         p <- p + scale_color_manual(values=pal, na.value=na.value)
       }
       if ('fill' %in% aesth) {
-        p <- p + scale_fill_manual(values=pal, na.value=na.value)
+         p <- p + scale_fill_manual(values=pal, na.value=na.value)
       }
-    }
-  } else { # unordered factor
-    if (length(levels(data[[x]])) <= 9) {
-      if ('color' %in% aesth) {
-        p <- p + scale_color_brewer(palette=palette.brewer.qual, na.value=na.value)
-      }
-      if ('fill' %in% aesth) {
-        p <- p + scale_fill_brewer(palette=palette.brewer.qual, na.value=na.value)
-      }
-    } else { # length(levels(data[[x]])) > 9
-      # use default
-      if ('color' %in% aesth) {
-        p <- p + scale_color_hue()
-      }
-      if ('fill' %in% aesth) {
-        p <- p + scale_fill_hue()
-      }
-    }
-  }
-  p
+   }
+   p
 }
 
 # place legend either at the bottom or on the right, wherever it occupies less space
@@ -947,7 +971,8 @@ add.axis.transform <- function(p, data, x, ax=c('x','y'), trans.log.thresh=2, ve
   }
 }
 
-
+# note: these layers work, but in case a log transform is applied,
+# the transformed data is received here - we need the original one.
 StatCenterX <- ggproto("StatCenterX", Stat,
                        required_aes = c("x","y"),
                        default_aes = aes(xintercept = ..x..),
@@ -960,7 +985,8 @@ StatCenterX <- ggproto("StatCenterX", Stat,
                        },
 
                        compute_group = function(data, scales, weight) {
-                          data <- group.central(data, 'x', c('group','PANEL'), w='weight', method='median', col.name='x')
+                          grp <- setdiff(names(data), c('x','weight'))
+                          data <- group.central(data, 'x', grp, w='weight', method='median', col.name='x')
                           data
                        }
 )
@@ -976,7 +1002,8 @@ StatCenterY <- ggproto("StatCenterY", Stat,
                       },
 
                       compute_group = function(data, scales, weight) {
-                         data <- group.central(data, 'y', c('group','PANEL'), w='weight', method='median', col.name='y')
+                         grp <- setdiff(names(data), c('y','weight'))
+                         data <- group.central(data, 'y', grp, w='weight', method='median', col.name='y')
                          data$x <- data$group
                          data
                       }
@@ -1006,6 +1033,18 @@ geom_vline_center <- function(mapping = NULL, data = NULL,
                        na.rm = na.rm, ...))
 }
 
+geom_vline_inheritable <- function (mapping = NULL, data = NULL, ..., xintercept, na.rm = FALSE,
+          show.legend = NA)
+{
+   if (!missing(xintercept)) {
+      data <- data.frame(xintercept = xintercept)
+      mapping <- aes(xintercept = xintercept)
+      show.legend <- FALSE
+   }
+   layer(data = data, mapping = mapping, stat = StatIdentity,
+         geom = GeomVline, position = PositionIdentity, show.legend = show.legend,
+         inherit.aes = TRUE, params = list(na.rm = na.rm, ...))
+}
 
 
 # 2D scatter plot of numeric or factor variables
@@ -1151,7 +1190,7 @@ gplt.scatter <- function(data, x, y, w='NULL',
       }
     }
   }
-  p
+  list(plot=p, data=data)
 }
 
 
@@ -1168,11 +1207,13 @@ gplt.hex <- function(data, x, y, w='NULL', trans.log.thresh=2,
   p <- add.axis.transform(p, data, x, 'x', trans.log.thresh, verbose=verbose)
   p <- add.axis.transform(p, data, y, 'y', trans.log.thresh, verbose=verbose)
 
-  p +
+  p <- p +
     # log scaling of color often reveals more details
     scale_fill_gradientn(colors=c(hcl(66,60,95), hcl(128,100,45)), trans='log', guide=FALSE) +
     theme(legend.position='right') +
     theme_panel_num_x + theme_panel_num_y
+
+  list(plot=p, data=data)
 }
 
 
@@ -1183,7 +1224,6 @@ gplt.hex <- function(data, x, y, w='NULL', trans.log.thresh=2,
 gplt.heat <- function(data, x, y, z='NULL', w='NULL', trans.log.thresh=2,
                         max.factor.levels=30,
                         resolution.heat=30,
-                        colors.gradient=c(hcl(66,60,85), hcl(128,100,45)),
                         palette.brewer.seq='YlGn',
                         palette.brewer.qual='Set1',
                         verbose=FALSE,
@@ -1214,7 +1254,8 @@ gplt.heat <- function(data, x, y, z='NULL', w='NULL', trans.log.thresh=2,
                          method='histogram')
     } else {
       data <- limit.factor.levels(data, v, w=w,
-                                  max.levels=resolution.heat, tol=max.factor.levels)
+                                  max.levels=min(resolution.heat,max.factor.levels),
+                                  tol=max.factor.levels)
     }
   }
 
@@ -1234,6 +1275,9 @@ gplt.heat <- function(data, x, y, z='NULL', w='NULL', trans.log.thresh=2,
   if (ex.z) {
     data <- replace.by.central(data, z, g.vars, w)
 
+    breaks <- length(get.palette(data[[z]], palette.brewer.seq,
+                               palette.brewer.qual)) - 1
+
     if (num.z) {
       # if z distribution is very skewed, better to quantize than to histogram
       trans.z <- get.trans.fun(data, z, trans.log.thresh)
@@ -1243,12 +1287,12 @@ gplt.heat <- function(data, x, y, z='NULL', w='NULL', trans.log.thresh=2,
       }
 
       # limited by color palette
-      data <- discretize(data, z, w=w, max.breaks=9, tol=9,
+      data <- discretize(data, z, w=w, max.breaks=breaks, tol=breaks,
                          estimate.breaks=FALSE, method=method)
     } else {
       data <- limit.factor.levels(data, z, w,
-                                  max.levels=9,
-                                  tol=9)
+                                  max.levels=breaks,
+                                  tol=breaks)
     }
     g.vars <- c(g.vars, z)
   }
@@ -1284,6 +1328,9 @@ gplt.heat <- function(data, x, y, z='NULL', w='NULL', trans.log.thresh=2,
 
   data$width <- res.x * sz
   data$height <- res.y * sz
+  # known issue: logarithmic scaling can make the rectangles overlap!
+  # plotluck(name ~ sleep_total + brainwt, data = msleep)
+
   p <- ggplot(data, aes_string(x=x, y=y, height='height', width='width', color=z, fill=z, weight=w)) +
     geom_tile(na.rm=TRUE, ...)
 
@@ -1293,7 +1340,6 @@ gplt.heat <- function(data, x, y, z='NULL', w='NULL', trans.log.thresh=2,
 
   if (ex.z) {
     p <- add.color.fill(p, data, z,
-                        colors.gradient=colors.gradient,
                         palette.brewer.seq=palette.brewer.seq,
                         palette.brewer.qual=palette.brewer.qual)
     p <- add.color.legend(p, data, z, 'fill')
@@ -1305,7 +1351,7 @@ gplt.heat <- function(data, x, y, z='NULL', w='NULL', trans.log.thresh=2,
     p <- p + theme_slanted_text_x
   }
 
-  p
+  list(plot=p, data=data)
 }
 
 # cleveland dot plot or bar plot with stat_bin
@@ -1363,7 +1409,7 @@ gplt.dot <- function(data, x, w='NULL', vertical=TRUE,
                      panel.grid.minor.y=element_blank())
     }
   }
-  p
+  list(plot=p, data=data)
 }
 
 
@@ -1426,7 +1472,7 @@ gplt.violin <- function(data, x, y, w='NULL',
    } else {
       p <- p + coord_flip() + theme_panel_fac_y + theme_panel_num_x
    }
-   p
+   list(plot=p, data=data)
 }
 
 
@@ -1471,7 +1517,7 @@ gplt.box <- function(data, x, y, w='NULL',
   } else {
     p <- p + coord_flip() + theme_panel_fac_y + theme_panel_num_x
   }
-  p
+  list(plot=p, data=data)
 }
 
 
@@ -1488,8 +1534,14 @@ gplt.density <- function(data, x, w='NULL',
 
    p <- ggplot(data, aes_string(x=x, weight=w)) +
       geom_density(aes_(y=~..scaled..), alpha=0.6, adjust=0.5, trim=TRUE, na.rm=TRUE, ...) +
-      geom_rug(na.rm=TRUE) +
-      geom_vline_center()
+      geom_rug(na.rm=TRUE)
+      # unfortunately the following does not work for log transformation -
+      # the layer received the transformed data + geom_vline_center()
+
+   if ('.center.' %in% names(data)) {
+      p <- p + geom_vline_inheritable(aes(xintercept=.center.),
+                                      linetype='dashed', size=0.7, na.rm=TRUE)
+   }
 
    # axis transformation
    p <- add.axis.transform(p, data, x, 'x', trans.log.thresh, verbose=verbose) +
@@ -1498,6 +1550,7 @@ gplt.density <- function(data, x, w='NULL',
       theme(axis.ticks.y=element_blank(),
             axis.text.y=element_blank()) +
       theme_panel_num_x
+   list(plot=p, data=data)
 }
 
 # histogram plot with overlayed vertical median lines
@@ -1525,8 +1578,9 @@ gplt.histogram <- function(data, x, w='NULL',
     ylab <- w
   }
 
-  p + ylab(ylab) +
+  p <- p + ylab(ylab) +
     theme_panel_num_x + theme_panel_num_y
+  list(plot=p, data=data)
 }
 
 
@@ -1552,7 +1606,6 @@ norm.sum <- function(x) {
 gplt.spine <- function(data, x, y, w='NULL',
                        plot.margin.x=0.05,
                        max.factor.levels=10,
-                       colors.gradient=c(hcl(66,60,85), hcl(128,100,45)),
                        palette.brewer.seq='YlGn',
                        palette.brewer.qual='Set1',
                        verbose=FALSE,
@@ -1607,11 +1660,10 @@ gplt.spine <- function(data, x, y, w='NULL',
     scale_x_continuous(breaks=x.tab.df$x.center, labels=levels(data[[x]])) +
     theme(axis.ticks.x=element_blank()) +
     # y reflected in color legend; however, we do want the label when part of a multiplot!
-    xlab(x)  + ylab(y)
-  theme_panel_num_y
+    xlab(x)  + ylab(y) +
+    theme_panel_fac_y
 
   p <- add.color.fill(p, data, y,
-                      colors.gradient=colors.gradient,
                       palette.brewer.seq=palette.brewer.seq,
                       palette.brewer.qual=palette.brewer.qual)
   p <- add.color.legend(p, data, y, 'fill')
@@ -1619,7 +1671,7 @@ gplt.spine <- function(data, x, y, w='NULL',
   if (estimate.label.overlap(labels=levels(data[[x]]), breaks=x.tab.df$x.center)) {
     p <- p + theme_slanted_text_x
   }
-  p
+  list(plot=p, data=data)
 }
 
 # spine plot of three variables
@@ -1630,7 +1682,6 @@ gplt.spine3 <- function(data, x, y, z, w='NULL',
                         plot.margin.x=0.05,
                         plot.margin.y=0.02,
                         max.factor.levels=10,
-                        colors.gradient=c(hcl(66,60,85), hcl(128,100,45)),
                         palette.brewer.seq='YlGn',
                         palette.brewer.qual='Set1',
                         verbose=FALSE,
@@ -1698,13 +1749,12 @@ gplt.spine3 <- function(data, x, y, z, w='NULL',
     scale_x_continuous(breaks=x.tab.df$x.center, labels=levels(data[[x]]))
 
   p <- add.color.fill(p, data, z,
-                      colors.gradient=colors.gradient,
                       palette.brewer.seq=palette.brewer.seq,
                       palette.brewer.qual=palette.brewer.qual)
   p <- add.color.legend(p, data, z, 'fill')
 
   p <- p + xlab(x) + ylab(y) +
-    theme_panel_num_y +
+    theme_panel_fac_y +
     theme(axis.ticks.x=element_blank(),
           axis.ticks.y=element_blank())
 
@@ -1712,7 +1762,7 @@ gplt.spine3 <- function(data, x, y, z, w='NULL',
   if (estimate.label.overlap(labels=levels(data[[x]]), breaks=x.tab.df$x.center)) {
     p <- p + theme_slanted_text_x
   }
-  p
+  list(plot=p, data=data)
 }
 
 
@@ -1732,7 +1782,7 @@ gplt.blank <- function(text=NULL, ...) {
   if (!is.null(text)) {
     p <- p + annotate('text', x=0.5, y=0.5, label=text, hjust=0.5, vjust=0.5)
   }
-  p
+  list(plot=p, data=data)
 }
 
 
@@ -1777,7 +1827,6 @@ gplt.blank <- function(text=NULL, ...) {
 #' \code{facet.num.grid} \tab \code{3} \tab Preferred number of facets for each of two conditional variables. \cr
 #' \code{prefer.factors.vert} \tab \code{TRUE} \tab In mixed numeric/factor plots, use vertical axis for the factor. \cr
 #' \code{fill.default} \tab \code{"deepskyblue"} \tab Default fill color for density and histogram plots. \cr
-#' \code{colors.gradient} \tab \code{c(hcl(66,60,85),hcl(128,100,45))} \tab Gradient colors for numeric and ordered variables. \cr
 #' \code{palette.brewer.seq} \tab \code{"YlGn"} \tab Sequential brewer palette name. \cr
 #' \code{palette.brewer.qual} \tab \code{"Set1"} \tab Qualitative brewer palette name. \cr
 #' \code{multi.entropy.order} \tab \code{TRUE} \tab Use estimated conditional entropy to order multi-plots. \cr
@@ -1837,7 +1886,6 @@ plotluck.options <- function(opts,...) {
       facet.num.grid=3,
       prefer.factors.vert=TRUE,
       fill.default='deepskyblue',
-      colors.gradient=c(hcl(66,60,85), hcl(128,100,45)),
       palette.brewer.seq='YlGn',
       palette.brewer.qual='Set1',
       multi.entropy.order=TRUE,
@@ -2128,11 +2176,7 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #'  distinguish different levels or ranges of a variable, the color scheme adjusts
 #'  to the type. Preferably, a sequential (resp. qualitative) palette is chosen
 #'  for a numeric/ordered (unordered) factor (\code{palette.brewer.seq},
-#'  \code{palette.brewer.qual}); see also \link[RColorBrewer]{RColorBrewer}. However, if the
-#'  size of this palette (usually between 8-12) is not sufficient, for an ordered
-#'  factor or numeric vector, a color ramp palette is generated according to options
-#'  \code{colors.gradient}. For an unordered factor with too many levels, the ggplot
-#'  default is used.
+#'  \code{palette.brewer.qual}); see also \link[RColorBrewer]{RColorBrewer}.
 #'
 #' @section Generating multiple plots at once: If \code{formula} contains a dot
 #'  (\code{"."}) symbol, the function creates a number of 1D or 2D plots by calling
@@ -2320,7 +2364,7 @@ plotluck <- function(formula, data, weights,
         data[[cond[i]]] <- ordered(data[[cond[i]]])
       } else {
         data <- limit.factor.levels(data, cond[i], w=weights,
-                                    max.levels=intervals)
+                                    max.levels=min(intervals, opts$max.factor.levels))
         if (!is.ordered(data[[cond[i]]])) {
           data <- order.factor.by.value(data, cond[i], order.by, weights, verbose=opts$verbose)
         }
@@ -2354,7 +2398,12 @@ plotluck <- function(formula, data, weights,
   # precompute medians
   if (length(vars.numeric) == 1) {
      grp.med <- group.central(data, vars.numeric, vars.non.numeric, w=weights, method='median')
-     data <- merge(data, grp.med)
+     if (length(vars.non.numeric) == 0) {
+        # single value
+        data$.center. <- grp.med$.center.
+     } else {
+      data <- merge(data, grp.med)
+     }
   }
 
   # note: factor levels cannot be limited before ordering is known!
@@ -2373,10 +2422,12 @@ plotluck <- function(formula, data, weights,
                                  weights, opts, ...)
   }
 
-  p <- res[[1]]
-  type.plot <- res[[2]]
+  p <- res$plot
+  data <- res$data
+  type.plot <- res$type.plot
 
   if (length(indep) < 2) {
+     # data is possibly modified, we need to pass it in
     p <- add.conditional.layer(p, data, response, indep, cond, type.plot, opts)
   }
   p <- p + theme(panel.background=element_blank(), # get rid of gray background
@@ -2390,7 +2441,7 @@ plotluck <- function(formula, data, weights,
 determine.plot.type.0 <- function(data, response, w, med.points.per.group,
                                   num.groups, opts,
                                   ...) {
-  p <- NULL
+  res <- NULL
   type.plot <- NULL
   opts.geom <- NULL
   choices.geom <- NULL
@@ -2403,13 +2454,13 @@ determine.plot.type.0 <- function(data, response, w, med.points.per.group,
     }
     if (opts.geom == 'density') {
       type.plot <- 'density'
-      p <- gplt.density(data, response, w=w,
+      res <- gplt.density(data, response, w=w,
                         trans.log.thresh=opts$trans.log.thresh,
                         verbose=opts$verbose,
                         ...)
     } else if (opts.geom == 'histogram') {
       type.plot <- 'histogram'
-      p <- gplt.histogram(data, response, w=w,
+      res <- gplt.histogram(data, response, w=w,
                           n.breaks=opts$n.breaks.histogram,
                           trans.log.thresh=opts$trans.log.thresh,
                           verbose=opts$verbose,
@@ -2423,29 +2474,31 @@ determine.plot.type.0 <- function(data, response, w, med.points.per.group,
       data[[indep]] <- as.factor(data[[indep]])
       type.plot <- 'scatter.num.1'
       if (!opts$prefer.factors.vert) {
-        p <- gplt.scatter(data, indep, response, w=w,
-                          dedupe.scatter=opts$dedupe.scatter,
-                          min.points.jitter=opts$min.points.jitter,
-                          trans.log.thresh=opts$trans.log.thresh,
-                          max.factor.levels=opts$max.factor.levels,
-                          verbose=opts$verbose,
-                          ...) +
-          theme(axis.ticks.x=element_blank(),
-                axis.text.x=element_blank()) +
-          xlab('')
-        # known issue: the conditioning layer can add theme_slanted_text_x,
-        # in which case spurious '1's appear on the x-axis.
+         res <- gplt.scatter(data, indep, response, w=w,
+                             dedupe.scatter=opts$dedupe.scatter,
+                             min.points.jitter=opts$min.points.jitter,
+                             trans.log.thresh=opts$trans.log.thresh,
+                             max.factor.levels=opts$max.factor.levels,
+                             verbose=opts$verbose,
+                             ...)
+         res$plot <- res$plot +
+            theme(axis.ticks.x=element_blank(),
+                  axis.text.x=element_blank()) +
+            xlab('')
+         # known issue: the conditioning layer can add theme_slanted_text_x,
+         # in which case spurious '1's appear on the x-axis.
       } else {
-        p <- gplt.scatter(data, response, indep, w=w,
-                          dedupe.scatter=opts$dedupe.scatter,
-                          min.points.jitter=opts$min.points.jitter,
-                          trans.log.thresh=opts$trans.log.thresh,
-                          max.factor.levels=opts$max.factor.levels,
-                          verbose=opts$verbose,
-                          ...) +
-          theme(axis.ticks.y=element_blank(),
-                axis.text.y=element_blank()) +
-          xlab('')
+         res <- gplt.scatter(data, response, indep, w=w,
+                             dedupe.scatter=opts$dedupe.scatter,
+                             min.points.jitter=opts$min.points.jitter,
+                             trans.log.thresh=opts$trans.log.thresh,
+                             max.factor.levels=opts$max.factor.levels,
+                             verbose=opts$verbose,
+                             ...)
+         res$plot <- res$plot +
+            theme(axis.ticks.y=element_blank(),
+                  axis.text.y=element_blank()) +
+            xlab('')
       }
     }
   } else { # !is.numeric(data[[response]])
@@ -2455,12 +2508,13 @@ determine.plot.type.0 <- function(data, response, w, med.points.per.group,
       opts.geom <- ifelse(num.groups < 6, 'bar', 'dot')
     }
     type.plot <- opts.geom
-    p <- gplt.dot(data, response, w=w, vertical=opts$prefer.factors.vert,
+    res <- gplt.dot(data, response, w=w, vertical=opts$prefer.factors.vert,
                   max.factor.levels=opts$max.factor.levels, geom=opts.geom,
                   verbose=opts$verbose, ...)
   }
   info.options(opts.geom, choices.geom, opts$verbose)
-  list(p, type.plot)
+  res$type.plot=type.plot
+  res
 }
 
 determine.plot.type.1 <- function(data, response, indep, cond,
@@ -2468,7 +2522,7 @@ determine.plot.type.1 <- function(data, response, indep, cond,
                                   max.points.per.group,
                                   num.groups, opts,
                                   ...) {
-  p <- NULL
+  res <- NULL
   type.plot <- NULL
   opts.geom <- NULL
   choices.geom <- NULL
@@ -2484,12 +2538,12 @@ determine.plot.type.1 <- function(data, response, indep, cond,
     fill.smooth <- ifelse(length(cond) == 0, opts$fill.default, 'NULL')
     if (opts.geom == 'hex') {
       type.plot <- 'hex'
-      p <- gplt.hex(data, indep, response, w=w, trans.log.thresh=opts$trans.log.thresh,
+      res <- gplt.hex(data, indep, response, w=w, trans.log.thresh=opts$trans.log.thresh,
                     # hex plot already has color, make the smoothing line neutral
                     fill.smooth='grey', ...)
     } else {
       type.plot <- 'scatter.num'
-      p <- gplt.scatter(data, indep, response, w,
+      res <- gplt.scatter(data, indep, response, w,
                         dedupe.scatter=opts$dedupe.scatter,
                         min.points.jitter=opts$min.points.jitter,
                         jitter.x=opts$jitter.x,
@@ -2511,21 +2565,19 @@ determine.plot.type.1 <- function(data, response, indep, cond,
 
     if (opts.geom == 'spine') {
        type.plot <- 'spine'
-       p <- gplt.spine(data, indep, response, w=w,
+       res <- gplt.spine(data, indep, response, w=w,
                        plot.margin.x=opts$spine.plot.margin.x,
                        max.factor.levels=opts$max.factor.levels.spine.x,
-                       colors.gradient=opts$colors.gradient,
                        palette.brewer.seq=opts$palette.brewer.seq,
                        palette.brewer.qual=opts$palette.brewer.qual,
                        verbose=opts$verbose,
                        ...)
     } else {
        type.plot <- 'heat'
-       p <- gplt.heat(data, indep, response, z='NULL', w=w,
+       res <- gplt.heat(data, indep, response, z='NULL', w=w,
                         trans.log.thresh=opts$trans.log.thresh,
                         max.factor.levels=opts$max.factor.levels,
                         resolution.heat=opts$resolution.heat,
-                        colors.gradient=opts$colors.gradient,
                         palette.brewer.seq=opts$palette.brewer.seq,
                         palette.brewer.qual=opts$palette.brewer.qual,
                         verbose=opts$verbose,
@@ -2548,7 +2600,7 @@ determine.plot.type.1 <- function(data, response, indep, cond,
            var.fac <- indep
            var.num <- response
         }
-        p <- gplt.dot(data, var.fac, w=var.num, vertical=opts$prefer.factors.vert,
+        res <- gplt.dot(data, var.fac, w=var.num, vertical=opts$prefer.factors.vert,
                       max.factor.levels=opts$max.factor.levels, geom=opts.geom,
                       verbose=opts$verbose, ...)
      } else { #
@@ -2573,14 +2625,14 @@ determine.plot.type.1 <- function(data, response, indep, cond,
 
         if (opts.geom == 'violin') {
            type.plot <- 'violin'
-           p <- gplt.violin(data, var.fac, var.num, w=w,
+           res <- gplt.violin(data, var.fac, var.num, w=w,
                             trans.log.thresh=opts$trans.log.thresh,
                             max.factor.levels=opts$max.factor.levels,
                             verbose=opts$verbose,
                             ...)
         } else if (opts.geom == 'box') {
            type.plot <- 'box'
-           p <- gplt.box(data, var.fac, var.num, w=w,
+           res <- gplt.box(data, var.fac, var.num, w=w,
                          trans.log.thresh=opts$trans.log.thresh,
                          max.factor.levels=opts$max.factor.levels,
                          verbose=opts$verbose,
@@ -2588,7 +2640,7 @@ determine.plot.type.1 <- function(data, response, indep, cond,
         } else { # opts.geom == 'scatter'
            # not enough points for violin or box plot
            type.plot <- 'scatter.mixed'
-           p <- gplt.scatter(data, var.fac, var.num, w=w,
+           res <- gplt.scatter(data, var.fac, var.num, w=w,
                              dedupe.scatter=opts$dedupe.scatter,
                              min.points.jitter=opts$min.points.jitter,
                              trans.log.thresh=opts$trans.log.thresh,
@@ -2599,12 +2651,13 @@ determine.plot.type.1 <- function(data, response, indep, cond,
      }
   }
   info.options(opts.geom, choices.geom, opts$verbose)
-  list(p, type.plot)
+  res$type.plot=type.plot
+  res
 }
 
 determine.plot.type.2 <- function(data, response, indep1, indep2, w, opts,
                                   ...) {
-  p <- NULL
+  res <- NULL
   type.plot <- NULL
   choices.geom <- c('spine', 'heat', 'auto')
   opts.geom <- match.arg(opts$geom, choices.geom)
@@ -2619,29 +2672,28 @@ determine.plot.type.2 <- function(data, response, indep1, indep2, w, opts,
 
   if (opts.geom == 'spine') {
     type.plot <- 'spine3'
-    p <- gplt.spine3(data, indep1, indep2, response, w=w,
+    res <- gplt.spine3(data, indep1, indep2, response, w=w,
                      plot.margin.x=opts$spine.plot.margin.x,
                      plot.margin.y=opts$spine.plot.margin.y,
                      max.factor.levels=opts$max.factor.levels.spine.x,
-                     colors.gradient=opts$colors.gradient,
                      palette.brewer.seq=opts$palette.brewer.seq,
                      palette.brewer.qual=opts$palette.brewer.qual,
                      verbose=opts$verbose,
                      ...)
   } else {
     type.plot <- 'heat3'
-    p <- gplt.heat(data, indep1, indep2, response, w=w,
+    res <- gplt.heat(data, indep1, indep2, response, w=w,
                      trans.log.thresh=opts$trans.log.thresh,
                      max.factor.levels=opts$max.factor.levels,
                      resolution.heat=opts$resolution.heat,
-                     colors.gradient=opts$colors.gradient,
                      palette.brewer.seq=opts$palette.brewer.seq,
                      palette.brewer.qual=opts$palette.brewer.qual,
                      verbose=opts$verbose,
                      ...)
   }
   info.options(opts.geom, choices.geom, opts$verbose)
-  list(p, type.plot)
+  res$type.plot=type.plot
+  res
 }
 
 
@@ -2713,7 +2765,6 @@ redundant.factor.color <- function(p, data, response, indep, type.plot, opts) {
   }
   if (!is.null(fac)) {
     p <- add.color.fill(p, data, fac,
-                        colors.gradient=opts$colors.gradient,
                         palette.brewer.seq=opts$palette.brewer.seq,
                         palette.brewer.qual=opts$palette.brewer.qual)  +
       guides(fill=FALSE, color=FALSE)
@@ -2752,7 +2803,6 @@ add.conditional.layer <- function(p, data, response, indep, cond, type.plot, opt
 
     if (u <= opts$max.factor.levels.color && !(type.plot %in% c('spine', 'heat', 'hex'))) {
       p <- add.color.fill(p, data, cond,
-                          colors.gradient=opts$colors.gradient,
                           palette.brewer.seq=opts$palette.brewer.seq,
                           palette.brewer.qual=opts$palette.brewer.qual)
 
@@ -3189,4 +3239,74 @@ sample.plotluck <- function(data, ...) {
   s <- sprintf('plotluck(%s, %s)\n', form, s)
   cat(s)
   plotluck(as.formula(form), data, ...) + labs(title=s) + theme(plot.title=element_text(size=10))
+}
+
+# same as sample.plotluck, but can be called with a list of options
+# only used for testing/debugging!
+sample.plotluck.testopts <- function(data, opts.list, ...) {
+   idx.ord <- which(sapply(data, is.ordered))
+   idx.fac <- which(sapply(data, function(x) {is.factor(x) && (!is.ordered(x))}))
+   idx.num <- setdiff(setdiff(seq(length(data)),idx.fac), idx.ord)
+   w <- match.call()$weights
+   if (!is.null(w)) {
+      idx.w <- which(names(data) == w)
+      idx.num <- setdiff(idx.num, idx.w)
+   }
+
+   types <- list()
+   if (length(idx.fac) > 0) {
+      types[[length(types)+1]] <- idx.fac
+   }
+   if (length(idx.ord) > 0) {
+      types[[length(types)+1]] <- idx.ord
+   }
+   if (length(idx.num) > 0) {
+      types[[length(types)+1]] <- idx.num
+   }
+   form.length <- sample(c(1,2,3),1)
+   cond.pos <- sample(seq(form.length), 1) + 0.5
+   form <- NULL
+   op <- NULL
+   for (pos in seq(form.length)) {
+      form <- c(form, op)
+      if (pos > cond.pos) {
+         cond.pos <- 1000
+         op <- '|'
+         if (pos == 1) {
+            form <- c(form, '~', '1')
+         }
+      } else if (pos == 1) {
+         op <- '~'
+      } else {
+         op <- '+'
+      }
+      while (TRUE) {
+         var.type <- sample(seq(length(types)), 1)
+         var <- sample(seq(length(types[[var.type]])),1)
+         var <- names(data)[(types[[var.type]][var])]
+         if (!(var %in% form)) {
+            # avoid duplication of variables
+            break
+         }
+      }
+      form <- c(form, var)
+   }
+   if (length(form) == 1) {
+      form <- c(form, '~', '1')
+   }
+   form <-do.call(paste, as.list(form))
+
+   # collect extra arguments
+   arg <- sapply(match.call()[seq(2,length(match.call()))], deparse)
+   s <- list()
+   for (i in seq(length(arg))) {
+      s[[length(s)+1]] <- sprintf('%s = %s', names(arg)[i], arg[i])
+   }
+   s <- do.call(paste,c(s,sep=', '))
+   s <- sprintf('plotluck(%s, %s)\n', form, s)
+   cat(s)
+   for (i in seq(length(opts.list))) {
+      print(i)
+      print(plotluck(as.formula(form), data, opts=opts.list[[i]],...) + labs(title=s) + theme(plot.title=element_text(size=10)))
+   }
 }
