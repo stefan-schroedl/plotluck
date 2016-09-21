@@ -61,4 +61,4 @@ plotluck(price~cut+color, diamonds)
 
 You can find more examples under `tests/testthat/test_plotluck.R.`
 
-More background is given in the vignette (inst/doc/plotluck.html).
+More background is given in the vignette (`inst/doc/plotluck.html`).
