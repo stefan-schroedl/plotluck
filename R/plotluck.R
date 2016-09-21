@@ -3,7 +3,7 @@
 #' @importFrom stats as.formula median quantile runif xtabs
 #' @importFrom grDevices colorRampPalette hcl
 #' @importFrom stats na.omit na.pass
-
+#'
 safe_log <- function(x,...) {
   ifelse(x<=0,0,log(x,...))
 }
@@ -1545,7 +1545,7 @@ gplt.density <- function(data, x, w='NULL',
       # the layer received the transformed data + geom_vline_center()
 
    if ('.center.' %in% names(data)) {
-      p <- p + geom_vline_inheritable(aes(xintercept=.center.),
+      p <- p + geom_vline_inheritable(aes_(xintercept=~.center.),
                                       linetype='dashed', size=0.7, na.rm=TRUE)
    }
 
@@ -1788,7 +1788,7 @@ gplt.blank <- function(text=NULL, ...) {
   if (!is.null(text)) {
     p <- p + annotate('text', x=0.5, y=0.5, label=text, hjust=0.5, vjust=0.5)
   }
-  list(plot=p, data=data)
+  list(plot=p, data=NULL)
 }
 
 
@@ -2280,6 +2280,7 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #' # Heat map
 #' plotluck(price~cut+color, diamonds)
 #'
+#'\donttest{
 #' # Multi plots
 #
 #' # All 1D distributions
@@ -2287,7 +2288,7 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #'
 #' # 2D dependencies with one fixed variable on vertical axis
 #' plotluck(Species~., iris)
-#'
+#'}
 #' # See also tests/testthat/test_plotluck.R for more examples!
 #'
 plotluck <- function(formula, data, weights,

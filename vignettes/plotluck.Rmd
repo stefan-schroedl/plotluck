@@ -211,4 +211,5 @@ Besides automated selection of plot type, `plotluck` offers the following featur
 
 1. Wickham, Hadley. ggplot2: elegant graphics for data analysis. Springer Science & Business Media, 2009.
 1. Cleveland, William S. The elements of graphing data. Monterey, CA: Wadsworth Advanced Books and Software, 1985.
+1. Sarkar, Deepayan. Lattice: multivariate data visualization with R. Springer Science & Business Media, 2008.
 1. Bryan, Jennifer. R package with excerpt of Gapminder data. <https://github.com/jennybc/gapminder>

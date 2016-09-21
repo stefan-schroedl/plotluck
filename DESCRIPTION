@@ -1,9 +1,7 @@
 Package: plotluck
-Title: GGPlot2 Version of 'I'm Feeling Lucky!'
-Version: 1.0
-Authors@R: "Stefan Schroedl <stefan.schroedl@gmx.de> [aut, cre]"
-Author: Stefan Schroedl <stefan.schroedl@gmx.de>
-Maintainer: Stefan Schroedl <stefan.schroedl@gmx.de>
+Title: Ggplot2 Version of 'I'm Feeling Lucky!'
+Version: 1.0.0
+Authors@R: person("Stefan", "Schroedl", , "stefan.schroedl@gmx.de", c("aut", "cre"))
 Description: A tool for quickly generating ggplots during exploratory data
     analysis with the aim of letting the user focus on what to plot, not
     on the how. Plotluck examines the data characteristics of one, two, or
@@ -20,8 +18,11 @@ Imports:
     scales (>= 0.4.0),
     plyr (>= 1.8.4),
     grid (>= 3.3.1),
-    hexbin (>= 1.27.1)
+    hexbin (>= 1.27.1),
+    RColorBrewer (>= 1.1.2)
 License: MIT + file LICENSE
+URL: https://github.com/stefan-schroedl/plotluck
+BugReports: https://github.com/stefan-schroedl/plotluck/issues
 LazyData: true
 Suggests:
     testthat,

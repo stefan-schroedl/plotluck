@@ -285,6 +285,7 @@ test_that_ref("2d_weight", "instance weights", {
 })
 
 test_that_ref("multi", "multiple plots", {
+   testthat::skip_on_cran()
    eq_ref(plotluck(.~1, diamonds))
 
    eq_ref(plotluck(price~., diamonds))

@@ -266,13 +266,14 @@ invisible(readline(prompt="Press [enter] to continue"))
 # Heat map
 plotluck(price~cut+color, diamonds)
 
+\donttest{
 # Multi plots
 # All 1D distributions
 plotluck(.~1, iris)
 
 # 2D dependencies with one fixed variable on vertical axis
 plotluck(Species~., iris)
-
+}
 # See also tests/testthat/test_plotluck.R for more examples!
 
 }
