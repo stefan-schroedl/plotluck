@@ -120,9 +120,7 @@ For choosing a suitable type of plot, the algorithm takes into account:
 * The type of these variables. Mainly, it distinguishes between numeric (continuous data), ordered (ordinal data), and
   unordered factors (categorical data). While ordered factors seem to be used somewhat less prominently in applied data analysis,
   for visualization it is sometimes beneficial to treat them similarly as numeric types, e.g., for sorting other dependent factors.
-* Additionally but less importantly, a few heuristics depend on instance counts. E.g., for small data sets, simple scatter plots can reveal more details than density diagrams or histograms; spine plots
-  get confusing with too many factor levels; and if there is only a single data point per factor
-  combination, we would rather see a bar plot than a degenerated box plot.
+* Additionally but less importantly, a few heuristics depend on instance counts. E.g., for small data sets, simple scatter plots can reveal more details than density diagrams or histograms; spine plots get confusing with too many factor levels; and if there is only a single data point per factor combination, we would rather see a bar plot than a degenerated box plot.
 
 One-variable numeric (resp. factor) distributions (formulas of the form `y~1`)
 are usually represented by density (resp. Cleveland dot) charts.
@@ -130,8 +128,8 @@ are usually represented by density (resp. Cleveland dot) charts.
 For two numerical variables (`y~x`), by default a scatter plot is produced, but
 for high numbers of points a hexbin is preferred.
 
-The relation between two factor variables can be depicted best by spine (a.k.a.,
-mosaic) plot, unless they have too many levels. Otherwise, the fallback is a heat map.
+The relation between two factor variables can be depicted best by a spine (a.k.a.,
+mosaic) plot; it is very intuitive to see probabilities represented by areas. The only downside is that for three-dimensional spine plots, it is necessary to identify the levels of the second variable (arranged along the y-axis) by counting the rectangles, which becomes unwieldy for more than a handful ones. The fallback then is a heat map.
 
 For a mixed-type (factor/numeric) pair of variables, violin plots are generated.
 However, if the resulting graph would contain too many of those in a row, the

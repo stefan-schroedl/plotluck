@@ -49,7 +49,6 @@ A named list of options, usable as argument to function \code{\link{plotluck}}.
 \code{facet.num.grid} \tab \code{3} \tab Preferred number of facets for each of two conditional variables. \cr
 \code{prefer.factors.vert} \tab \code{TRUE} \tab In mixed numeric/factor plots, use vertical axis for the factor. \cr
 \code{fill.default} \tab \code{"deepskyblue"} \tab Default fill color for density and histogram plots. \cr
-\code{colors.gradient} \tab \code{c(hcl(66,60,85),hcl(128,100,45))} \tab Gradient colors for numeric and ordered variables. \cr
 \code{palette.brewer.seq} \tab \code{"YlGn"} \tab Sequential brewer palette name. \cr
 \code{palette.brewer.qual} \tab \code{"Set1"} \tab Qualitative brewer palette name. \cr
 \code{multi.entropy.order} \tab \code{TRUE} \tab Use estimated conditional entropy to order multi-plots. \cr

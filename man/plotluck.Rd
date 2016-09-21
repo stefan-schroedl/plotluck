@@ -156,11 +156,7 @@ curves or median lines.
  distinguish different levels or ranges of a variable, the color scheme adjusts
  to the type. Preferably, a sequential (resp. qualitative) palette is chosen
  for a numeric/ordered (unordered) factor (\code{palette.brewer.seq},
- \code{palette.brewer.qual}); see also \link[RColorBrewer]{RColorBrewer}. However, if the
- size of this palette (usually between 8-12) is not sufficient, for an ordered
- factor or numeric vector, a color ramp palette is generated according to options
- \code{colors.gradient}. For an unordered factor with too many levels, the ggplot
- default is used.
+ \code{palette.brewer.qual}); see also \link[RColorBrewer]{RColorBrewer}.
 }
 
 \section{Generating multiple plots at once}{

@@ -4,7 +4,7 @@
 * Changed _plotluck()_ arguments to use a formula instead of arguments _x,y,z_
 * Removed _plotluck.multi()_ from being public - functionality can now be accessed using dot symbol _'.'_ in plotluck formula
 * Added function sample.plotluck() to generate random plots from a data set
-* Changed heat map visualization to change rectangle size with count/weight
+* Changed heat map visualization to vary rectangle size with count/weight
 * Renamed and removed some options
 * Added new option _verbose_ that outputs information about plot types, log scaling, etc
 * Added new override option _geom_ to directly set plot type

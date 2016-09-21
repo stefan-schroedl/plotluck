@@ -248,9 +248,9 @@ group.central <- function(data, x, group.vars, w='NULL', method=c('median', 'mea
     }
   }
 
-  # for ordinals, reattach levels
+  # for ordinals, reattach levels, but keep order
   if (is.ord && (!ordered.as.num)) {
-    grp.center[[length(grp.center)]] <- ordered(lev[round(grp.center[[length(grp.center)]])], exclude=NULL)
+    grp.center[[length(grp.center)]] <- ordered(lev[round(grp.center[[length(grp.center)]])], levels=lev, exclude=NULL)
   }
 
   names(grp.center)[length(grp.center)] <- col.name
@@ -793,12 +793,24 @@ estimate.label.overlap <- function(labels, breaks=seq(length(labels))) {
    return(FALSE)
 }
 
+
+# add color and/or fill scale layers to plot
+# - use qualitative (sequential) brewer scale for (un)ordered factors, if
+#   palette size supports it.
+#   Otherwise, extend it using colorRampPalette.
+# - if too few colors, use qualitative (first few colors of brewer palette might not look good by themselves!)
+
 get.palette <- function(x, palette.brewer.seq='YlGn', palette.brewer.qual='Set1',
                         adjust.size=FALSE) {
 
    is.num <- is.numeric(x)
    is.ord <- is.ordered(x)
-   u <- length(unique(x))
+   if (is.num) {
+      u <- length(unique(x))
+   } else {
+      # note: there can be unused levels
+      u <- length(levels(x))
+   }
    if (u <= 2) {
       # treat as qualitative
       is.ord <- FALSE
@@ -829,13 +841,6 @@ get.palette <- function(x, palette.brewer.seq='YlGn', palette.brewer.qual='Set1'
    }
    pal
 }
-
-# add color and/or fill scale layers to plot
-# - use qualitative (sequential) brewer scale for (un)ordered factors, if
-#   palette size supports it.
-#   Otherwise, create a colorRampPalette for ordered factors, or use the default if unordered.
-# - use a gradient fill for numeric vectors
-# - if too few colors, use default (first two colors of brewer palette might not look good by themselves!)
 
 add.color.fill <- function(p, data, x, aesth=c('color', 'fill'),
                            palette.brewer.seq='YlGn',
@@ -1328,15 +1333,16 @@ gplt.heat <- function(data, x, y, z='NULL', w='NULL', trans.log.thresh=2,
 
   data$width <- res.x * sz
   data$height <- res.y * sz
-  # known issue: logarithmic scaling can make the rectangles overlap!
-  # plotluck(name ~ sleep_total + brainwt, data = msleep)
 
   p <- ggplot(data, aes_string(x=x, y=y, height='height', width='width', color=z, fill=z, weight=w)) +
     geom_tile(na.rm=TRUE, ...)
 
   # axis transformation
-  p <- add.axis.transform(p, data, x, 'x', trans.log.thresh, verbose=verbose)
-  p <- add.axis.transform(p, data, y, 'y', trans.log.thresh, verbose=verbose)
+  # known issue: logarithmic scaling can make the rectangles overlap!
+  # plotluck(name ~ sleep_total + brainwt, data = msleep)
+  # disabling for now ...
+  #p <- add.axis.transform(p, data, x, 'x', trans.log.thresh, verbose=verbose)
+  #p <- add.axis.transform(p, data, y, 'y', trans.log.thresh, verbose=verbose)
 
   if (ex.z) {
     p <- add.color.fill(p, data, z,
@@ -3243,6 +3249,16 @@ sample.plotluck <- function(data, ...) {
 
 # same as sample.plotluck, but can be called with a list of options
 # only used for testing/debugging!
+
+# e.g.
+# opts.list<-list()
+# opts[[1]]<-plotluck.options(verbose=T)
+# opts[[2]]<-plotluck.options(verbose=T,prefer.factors.vert=F)
+# opts[[3]]<-plotluck.options(verbose=T,prefer.factors.vert=F,max.factor.levels.color=100)
+# opts[[4]]<-plotluck.options(verbose=T,prefer.factors.vert=T,max.factor.levels.color=100,dedupe.scatter='jitter',min.points.hex=10000,min.points.density=1E20,min.points.violin=1E20)
+# opts[[5]]<-plotluck.options(verbose=T,prefer.factors.vert=F,max.factor.levels=3)
+
+
 sample.plotluck.testopts <- function(data, opts.list, ...) {
    idx.ord <- which(sapply(data, is.ordered))
    idx.fac <- which(sapply(data, function(x) {is.factor(x) && (!is.ordered(x))}))
