@@ -2,13 +2,14 @@ Package: plotluck
 Title: 'ggplot2' Version of "I'm Feeling Lucky!"
 Version: 1.0.0
 Authors@R: person("Stefan", "Schroedl", , "stefan.schroedl@gmx.de", c("aut", "cre"))
-Description: A 'ggplot2'-based tool for quickly generating visualizations during
-    exploratory data analysis with the aim of letting the user focus on what to
-    plot, not on the "how". 'Plotluck' examines the data characteristics of up to
-    three variables and accordingly creates a scatter, violin, box, bar, density,
-    hex or spine plot, or a heat map. It also automates handling of observation
-    weights,log-scaling of axes, reordering of factor levels, and overlays of
-    smoothing curves and median lines.
+Description: Examines the characteristics of a data frame and a formula to
+    automatically choose the most suitable type of plot out of the following supported
+    options: scatter, violin, box, bar, density, hexagon bin, spine plot, and
+    heat map. The aim of the package is to let the user focus on what to plot,
+    rather than on the "how" during exploratory data analysis. It also automates
+    handling of observation weights, logarithmic axis scaling, reordering of
+    factor levels, and overlaying smoothing curves and median lines. Plots are
+    drawn using 'ggplot2'.
 Depends:
     R (>= 3.3.1)
 Imports:

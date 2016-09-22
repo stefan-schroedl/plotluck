@@ -1,9 +1,7 @@
 ## Resubmission
-This is a resubmission. In this version I have:
-
-* In the DESCRIPTION, put software names in single quotes; slightly reformulated
-* Regenerated the vignette to be in sync with the source.
-* Corrected a wrong use of testthat::skip_on_cran() in the tests
+This is a resubmission. In this version I have reformulated the DESCRIPTION
+according to the feedback (first sentence in active case, moved reference to ggplot2
+to the end).
 
 ## Test environments
 * local OS X install, R 3.3.1
