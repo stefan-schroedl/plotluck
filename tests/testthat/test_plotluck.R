@@ -4,9 +4,10 @@
 .file.cnt <- 0
 .prefix <- 'test'
 
-# set .debug to TRUE to visually inspect all tests
+# set .test.mode to 'demo' to visually inspect all tests
+# set .test.mode to 'regression' to ensure plots stay identical
 
-if (exists('.debug') && .debug) {
+if (exists('.test.mode') && .test.mode == 'regression') {
    context("Regression Tests")
 
    test_that_ref <- function(prefix, desc, code) {
@@ -26,12 +27,16 @@ if (exists('.debug') && .debug) {
       code
    }
 
-   eq_ref <- function(x) {
-      print(x)
-      #l <- readline(prompt="Hit <RETURN> to continue, anything else to quit: ")
-      #if (nchar(l) > 0) {
-      #   stop('', call.=FALSE, domain=NA)
-      #}
+   if (exists('.test.mode') && .test.mode == 'demo') {
+      eq_ref <- function(x) {
+         print(x)
+         l <- readline(prompt="Hit <RETURN> to continue, anything else to quit: ")
+         if (nchar(l) > 0) {
+            stop('', call.=FALSE, domain=NA)
+         }
+      }
+   } else {
+      eq_ref <- function(x)  { print(x); expect_true(TRUE) }
    }
 }
 
@@ -62,7 +67,7 @@ test_that_ref("1d_scatter", "1D scatter num/fact", {
 
 
 test_that_ref("1d_bar", "1D bar", {
-   eq_ref(plotluck(mpaa~2, movies))
+   eq_ref(plotluck(mpaa~1, movies))
 })
 
 
@@ -187,7 +192,7 @@ test_that_ref("3d_scatter", "3D scatter", {
 
 
 test_that_ref("3d_density", "3D density", {
-   # violin, facets
+   # density, facets
    eq_ref(plotluck(price~1|cut+color, diamonds))
 
    # scatter, facets
@@ -285,11 +290,12 @@ test_that_ref("2d_weight", "instance weights", {
 })
 
 test_that_ref("multi", "multiple plots", {
-   testthat::skip_on_cran()
-   eq_ref(plotluck(.~1, diamonds))
 
-   eq_ref(plotluck(price~., diamonds))
-
-   eq_ref(plotluck(.~price, diamonds))
+   #testthat::skip_on_cran()
+   if (identical(Sys.getenv("NOT_CRAN"), "true")) {
+      eq_ref(plotluck(.~1, diamonds))
+      eq_ref(plotluck(price~., diamonds))
+      eq_ref(plotluck(.~price, diamonds))
+   }
 
 })

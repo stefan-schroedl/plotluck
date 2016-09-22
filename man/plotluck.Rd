@@ -53,7 +53,7 @@ curves or median lines.
   as numeric types.
 
   One-variable numeric (resp. factor) distributions are usually represented by
-  density (resp. Cleveland dot) charts, but can be overriden to histograms or
+  density (resp. Cleveland dot) charts, but can be overridden to histograms or
   bar plots using the \code{geom} option. Density plots come with an overlaid
   vertical median line.
 
@@ -66,7 +66,7 @@ curves or median lines.
   \code{max.factor.levels.spine.x}, \code{max.factor.levels.spine.y},
   \code{max.factor.levels.spine.z}). Otherwise, a heat map is produced.
 
-  For a mixed-type (factor/numeric) pair of variables, violin (overrideable
+  For a mixed-type (factor/numeric) pair of variables, violin (overridable
   to box) plots are generated. However, if the resulting graph would contain
   too many (more than \code{max.factor.levels.violin}) violin plots in a row,
   the algorithm switches automatically. The number of bins of a histogram can
@@ -233,7 +233,7 @@ curves or median lines.
  \code{plotluck} is designed for generic out-of-the-box
  plotting, and not suitable to produce more specialized types of plots that
  arise in specific application domains (e.g., association, stem-and-leaf,
- star plots, geo maps, etc). It is restricted to at most three variables.
+ star plots, geographic maps, etc). It is restricted to at most three variables.
  Parallel plots with variables on different scales (such as time
  series of multiple related signals) are not supported.
 }
@@ -287,7 +287,7 @@ visualization
 
 plotting
 
-exploratory data analyis
+exploratory data analysis
 
 ggplot
 
