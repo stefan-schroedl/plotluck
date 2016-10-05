@@ -1,6 +1,6 @@
 Package: plotluck
 Title: 'ggplot2' Version of "I'm Feeling Lucky!"
-Version: 1.0.0
+Version: 1.0.0.9000
 Authors@R: person("Stefan", "Schroedl", , "stefan.schroedl@gmx.de", c("aut", "cre"))
 Description: Examines the characteristics of a data frame and a formula to
     automatically choose the most suitable type of plot out of the following supported

@@ -1,12 +1,9 @@
----
-output: github_document
----
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
 
 
-# GGPlot2 version of "I'm Feeling Lucky!"
+# GGPlot2 version of "I'm Feeling Lucky!" ![CRAN Version](http://www.r-pkg.org/badges/version/plotluck) ![CRAN Downloads](http://cranlogs.r-pkg.org/badges/plotluck)
 
 ## Purpose
 
