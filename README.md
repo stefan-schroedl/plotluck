@@ -3,7 +3,7 @@
 
 
 
-# GGPlot2 version of "I'm Feeling Lucky!" ![CRAN Version](http://www.r-pkg.org/badges/version/plotluck) ![CRAN Downloads](http://cranlogs.r-pkg.org/badges/plotluck)
+# GGPlot2 version of "I'm Feeling Lucky!" [![CRAN Version](http://www.r-pkg.org/badges/version/plotluck)](https://cran.r-project.org/package=plotluck) [![CRAN Downloads](http://cranlogs.r-pkg.org/badges/plotluck)](https://cran.r-project.org/package=plotluck)
 
 ## Purpose
 
