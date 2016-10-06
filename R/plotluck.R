@@ -1855,10 +1855,10 @@ gplt.blank <- function(text=NULL, ...) {
 #'
 #' data(iris)
 #' # default with violin plot
-#' plotluck(Petal.Length~Species, iris)
+#' plotluck(iris, Petal.Length~Species)
 #'
 #' # use box-and-whiskers plot instead
-#' plotluck(Petal.Length~Species, iris, opts=plotluck.options(geom='box'))
+#' plotluck(iris, Petal.Length~Species, opts=plotluck.options(geom='box'))
 #'
 #' @export
 plotluck.options <- function(opts,...) {
@@ -2043,6 +2043,7 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #' axis scaling, ordering and pruning of factor levels, and overlaying smoothing
 #' curves or median lines.
 #'
+#' @param data a data frame.
 #' @param formula an object of class \code{\link[stats]{formula}}: a symbolic description
 #'  of the relationship of up to three variables.
 #' \tabular{lll}{
@@ -2062,7 +2063,6 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #' \code{.~x}\tab Plot each variable in the data frame against \code{x}\cr
 #' \code{.~.}\tab Plot each variable in the data frame against each other.\cr}
 #'  See also section "Generating multiple plots at once" below.
-#' @param data a data frame.
 #' @param weights observation weights or frequencies (optional).
 #' @param opts a named list of options (optional); See also \code{\link{plotluck.options}}.
 #' @param ... additional parameters to be passed to the respective ggplot2 geom objects.
@@ -2254,44 +2254,44 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #' @examples
 #' # Single-variable density
 #' data(diamonds, package='ggplot2')
-#' plotluck(price~1, diamonds)
+#' plotluck(diamonds, price~1)
 #' invisible(readline(prompt="Press [enter] to continue"))
 #'
 #' # Violin plot
 #' data(iris)
-#' plotluck(Species~Petal.Length,iris)
+#' plotluck(iris, Species~Petal.Length)
 #' invisible(readline(prompt="Press [enter] to continue"))
 #'
 #' # Scatter plot
 #' data(mpg, package='ggplot2')
-#' plotluck(cty~model, data=mpg)
+#' plotluck(mpg, cty~model)
 #' invisible(readline(prompt="Press [enter] to continue"))
 #'
 #' # Spine plot
 #' data(Titanic)
-#' plotluck(Survived~Class+Sex, weights=Freq, as.data.frame(Titanic))
+#' plotluck(as.data.frame(Titanic), Survived~Class+Sex, weights=Freq)
 #' invisible(readline(prompt="Press [enter] to continue"))
 #'
 #' # Facetting
 #' data(msleep, package='ggplot2')
-#' plotluck(sleep_total~bodywt|vore, msleep)
+#' plotluck(msleep, sleep_total~bodywt|vore)
 #' invisible(readline(prompt="Press [enter] to continue"))
 #'
 #' # Heat map
-#' plotluck(price~cut+color, diamonds)
+#' plotluck(diamonds, price~cut+color)
 #'
 #'\donttest{
 #' # Multi plots
 #
 #' # All 1D distributions
-#' plotluck(.~1, iris)
+#' plotluck(iris, .~1)
 #'
 #' # 2D dependencies with one fixed variable on vertical axis
-#' plotluck(Species~., iris)
+#' plotluck(iris, Species~.)
 #'}
 #' # See also tests/testthat/test_plotluck.R for more examples!
 #'
-plotluck <- function(formula, data, weights,
+plotluck <- function(data, formula, weights,
                      opts=plotluck.options(),
                      ...) {
   parsed <- parse.formula(formula)
@@ -2832,7 +2832,7 @@ add.conditional.layer <- function(p, data, response, indep, cond, type.plot, opt
     #          add.facet.wrap(p, data, cond[1], preferred.order, opts)
     #    }
     # } else {
-    # example: plotluck(price~1|cut+clarity, diamonds)
+    # example: plotluck(diamonds, price~1|cut+clarity)
     p <- redundant.factor.color(p, data, response, indep, type.plot, opts)
     add.facet.grid(p, data, cond)
     #}
@@ -3127,10 +3127,10 @@ plotluck.multi <- function(response, indep, data, w='NULL',
 
   if (w != 'NULL')
   {
-    call.strs <- sprintf('plotluck(%s~%s, data, w=%s, opts=plotluck.options(opts,%s), ...)%s%s',
+    call.strs <- sprintf('plotluck(data, %s~%s, w=%s, opts=plotluck.options(opts,%s), ...)%s%s',
                          combi$y, combi$x, w, combi$opts, combi$labs, theme.multi)
   } else {
-    call.strs <- sprintf('plotluck(%s~%s, data, opts=plotluck.options(opts,%s), ...)%s%s',
+    call.strs <- sprintf('plotluck(data, %s~%s, opts=plotluck.options(opts,%s), ...)%s%s',
                          combi$y, combi$x, combi$opts, combi$labs, theme.multi)
   }
 
@@ -3238,14 +3238,18 @@ sample.plotluck <- function(data, ...) {
 
   # collect extra arguments
   arg <- sapply(match.call()[seq(2,length(match.call()))], deparse)
-  s <- list()
-  for (i in seq(length(arg))) {
-    s[[length(s)+1]] <- sprintf('%s = %s', names(arg)[i], arg[i])
+  if (length(arg) == 1) {
+     s <- sprintf('plotluck(%s, %s)\n', as.character(match.call()[2]), form)
+  } else {
+     s <- list()
+     for (i in seq(2, length(arg))) {
+        s[[length(s)+1]] <- sprintf('%s = %s', names(arg)[i], arg[i])
+     }
+     s <- do.call(paste, c(s, sep=', '))
+     s <- sprintf('plotluck(%s, %s, %s)\n', as.character(match.call()[2]), form, s)
   }
-  s <- do.call(paste,c(s,sep=', '))
-  s <- sprintf('plotluck(%s, %s)\n', form, s)
   cat(s)
-  plotluck(as.formula(form), data, ...) + labs(title=s) + theme(plot.title=element_text(size=10))
+  plotluck(data, as.formula(form), ...) + labs(title=s) + theme(plot.title=element_text(size=10))
 }
 
 # same as sample.plotluck, but can be called with a list of options
@@ -3253,11 +3257,11 @@ sample.plotluck <- function(data, ...) {
 
 # e.g.
 # opts.list<-list()
-# opts[[1]]<-plotluck.options(verbose=T)
-# opts[[2]]<-plotluck.options(verbose=T,prefer.factors.vert=F)
-# opts[[3]]<-plotluck.options(verbose=T,prefer.factors.vert=F,max.factor.levels.color=100)
-# opts[[4]]<-plotluck.options(verbose=T,prefer.factors.vert=T,max.factor.levels.color=100,dedupe.scatter='jitter',min.points.hex=10000,min.points.density=1E20,min.points.violin=1E20)
-# opts[[5]]<-plotluck.options(verbose=T,prefer.factors.vert=F,max.factor.levels=3)
+# opts.list[[1]]<-plotluck.options(verbose=T)
+# opts.list[[2]]<-plotluck.options(verbose=T,prefer.factors.vert=F)
+# opts.list[[3]]<-plotluck.options(verbose=T,prefer.factors.vert=F,max.factor.levels.color=100)
+# opts.list[[4]]<-plotluck.options(verbose=T,prefer.factors.vert=T,max.factor.levels.color=100,dedupe.scatter='jitter',min.points.hex=10000,min.points.density=1E20,min.points.violin=1E20)
+# opts.list[[5]]<-plotluck.options(verbose=T,prefer.factors.vert=F,max.factor.levels=3)
 
 
 sample.plotluck.testopts <- function(data, opts.list, ...) {
@@ -3315,15 +3319,20 @@ sample.plotluck.testopts <- function(data, opts.list, ...) {
 
    # collect extra arguments
    arg <- sapply(match.call()[seq(2,length(match.call()))], deparse)
-   s <- list()
-   for (i in seq(length(arg))) {
-      s[[length(s)+1]] <- sprintf('%s = %s', names(arg)[i], arg[i])
+   if (length(arg) <= 2) {
+      s <- sprintf('plotluck(%s, %s)', as.character(match.call()[2]), form)
+   } else {
+      s <- list()
+      for (i in seq(3, length(arg))) {
+         s[[length(s)+1]] <- sprintf('%s = %s', names(arg)[i], arg[i])
+      }
+      s <- do.call(paste, c(s, sep=', '))
+      s <- sprintf('plotluck(%s, %s, %s)', as.character(match.call()[2]), form, s)
    }
-   s <- do.call(paste,c(s,sep=', '))
-   s <- sprintf('plotluck(%s, %s)\n', form, s)
-   cat(s)
+
    for (i in seq(length(opts.list))) {
-      print(i)
-      print(plotluck(as.formula(form), data, opts=opts.list[[i]],...) + labs(title=s) + theme(plot.title=element_text(size=10)))
+      s.opt <- paste(s, sprintf(' [OPTION %d]', i), sep='')
+      cat(s.opt)
+      print(plotluck(data, as.formula(form), opts=opts.list[[i]],...) + labs(title=s.opt) + theme(plot.title=element_text(size=10)))
    }
 }

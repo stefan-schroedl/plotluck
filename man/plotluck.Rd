@@ -4,9 +4,11 @@
 \alias{plotluck}
 \title{"I'm feeling lucky" for ggplot}
 \usage{
-plotluck(formula, data, weights, opts = plotluck.options(), ...)
+plotluck(data, formula, weights, opts = plotluck.options(), ...)
 }
 \arguments{
+\item{data}{a data frame.}
+
 \item{formula}{an object of class \code{\link[stats]{formula}}: a symbolic description
  of the relationship of up to three variables.
 \tabular{lll}{
@@ -26,8 +28,6 @@ series of plots (use with caution, can be slow).
 \code{.~x}\tab Plot each variable in the data frame against \code{x}\cr
 \code{.~.}\tab Plot each variable in the data frame against each other.\cr}
  See also section "Generating multiple plots at once" below.}
-
-\item{data}{a data frame.}
 
 \item{weights}{observation weights or frequencies (optional).}
 
@@ -240,39 +240,39 @@ curves or median lines.
 \examples{
 # Single-variable density
 data(diamonds, package='ggplot2')
-plotluck(price~1, diamonds)
+plotluck(diamonds, price~1)
 invisible(readline(prompt="Press [enter] to continue"))
 
 # Violin plot
 data(iris)
-plotluck(Species~Petal.Length,iris)
+plotluck(iris, Species~Petal.Length)
 invisible(readline(prompt="Press [enter] to continue"))
 
 # Scatter plot
 data(mpg, package='ggplot2')
-plotluck(cty~model, data=mpg)
+plotluck(mpg, cty~model)
 invisible(readline(prompt="Press [enter] to continue"))
 
 # Spine plot
 data(Titanic)
-plotluck(Survived~Class+Sex, weights=Freq, as.data.frame(Titanic))
+plotluck(as.data.frame(Titanic), Survived~Class+Sex, weights=Freq)
 invisible(readline(prompt="Press [enter] to continue"))
 
 # Facetting
 data(msleep, package='ggplot2')
-plotluck(sleep_total~bodywt|vore, msleep)
+plotluck(msleep, sleep_total~bodywt|vore)
 invisible(readline(prompt="Press [enter] to continue"))
 
 # Heat map
-plotluck(price~cut+color, diamonds)
+plotluck(diamonds, price~cut+color)
 
 \donttest{
 # Multi plots
 # All 1D distributions
-plotluck(.~1, iris)
+plotluck(iris, .~1)
 
 # 2D dependencies with one fixed variable on vertical axis
-plotluck(Species~., iris)
+plotluck(iris, Species~.)
 }
 # See also tests/testthat/test_plotluck.R for more examples!
 

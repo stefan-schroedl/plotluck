@@ -55,19 +55,19 @@ data(diamonds, package='ggplot2')
 # 1D
 
 test_that_ref("1d_density", "1D density plot", {
-   eq_ref(plotluck(Petal.Length~1, iris))
+   eq_ref(plotluck(iris, Petal.Length~1))
 })
 
 test_that_ref("1d_scatter", "1D scatter num/fact", {
    # area
-   eq_ref(plotluck(Petal.Length~1, iris, opts=plotluck.options(min.points.density=1E20)))
+   eq_ref(plotluck(iris, Petal.Length~1, opts=plotluck.options(min.points.density=1E20)))
    # jitter
-   eq_ref(plotluck(Petal.Length~1, iris, opts=plotluck.options(min.points.density=1E20, dedupe.scatter='jitter')))
+   eq_ref(plotluck(iris, Petal.Length~1, opts=plotluck.options(min.points.density=1E20, dedupe.scatter='jitter')))
 })
 
 
 test_that_ref("1d_bar", "1D bar", {
-   eq_ref(plotluck(mpaa~1, movies))
+   eq_ref(plotluck(movies, mpaa~1))
 })
 
 
@@ -79,64 +79,64 @@ test_that_ref("1d_scaling", "log scaling", {
                     b=c(10*m, rnorm(n-1, mean=m, sd=5)),
                     c=m*c(-2*m, rexp(n-1, 1)),
                     d=-m*rexp(n, 1))
-   eq_ref(plotluck(a~1, df))
-   eq_ref(plotluck(b~1, df))
-   eq_ref(plotluck(c~1, df))
-   eq_ref(plotluck(d~1, df))
+   eq_ref(plotluck(df, a~1))
+   eq_ref(plotluck(df, b~1))
+   eq_ref(plotluck(df, c~1))
+   eq_ref(plotluck(df, d~1))
 })
 
 
 test_that_ref("2d_scatter", "2D scatter", {
-   eq_ref(plotluck(Petal.Length~Petal.Width, iris))
+   eq_ref(plotluck(iris, Petal.Length~Petal.Width))
 
    # hex
    # note: when running devtools::check(), weird dependency problem with mgce,
    #  nlme; comment out the following three tests
-   eq_ref(plotluck(votes~rating, movies))
+   eq_ref(plotluck(movies, votes~rating))
 
    # scatter
-   eq_ref(plotluck(rating~votes, movies,
+   eq_ref(plotluck(movies, rating~votes,
                   opts=plotluck.options(min.points.hex=1E20)))
 
    # scatter, no log scaling
-   eq_ref(plotluck(rating~votes, movies,
+   eq_ref(plotluck(movies, rating~votes,
                    opts=plotluck.options(min.points.hex=1E20, trans.log.thresh=100)))
 })
 
 
 test_that_ref("2d_density", "2D density", {
    # using facets
-   eq_ref(plotluck(rating~1|mpaa, movies))
+   eq_ref(plotluck(movies, rating~1|mpaa))
 
    # using colors
-   eq_ref(plotluck(Petal.Length~1|Species, iris))
+   eq_ref(plotluck(iris, Petal.Length~1|Species))
 
    # scatter
-   eq_ref(plotluck(Petal.Length~Species, iris,
+   eq_ref(plotluck(iris, Petal.Length~Species,
                    opts=plotluck.options(min.points.violin=1E20)))
    # ordering
    i2 <- iris
    i2$Species <- as.ordered(i2$Species)
-   eq_ref(plotluck(Petal.Length~1|Species, i2))   # note color scheme
-   eq_ref(plotluck(price~cut, diamonds))
+   eq_ref(plotluck(i2, Petal.Length~1|Species))   # note color scheme
+   eq_ref(plotluck(diamonds, price~cut))
 
 })
 
 
 test_that_ref("2d_box", "2D box/violin plot", {
-   eq_ref(plotluck(rating~mpaa, movies))
+   eq_ref(plotluck(movies, rating~mpaa))
 
    # box instead of violin
-   eq_ref(plotluck(rating~mpaa, movies, opts=plotluck.options(geom='box')))
+   eq_ref(plotluck(movies, rating~mpaa, opts=plotluck.options(geom='box')))
 
    # as scatter plot
-   eq_ref(plotluck(rating~mpaa, movies, opts=plotluck.options(min.points.violin=1E20)))
+   eq_ref(plotluck(movies, rating~mpaa, opts=plotluck.options(min.points.violin=1E20)))
 
    # with jittering
-   eq_ref(plotluck(rating~mpaa, movies, opts=plotluck.options(min.points.violin=1E20, dedupe.scatter='jitter')))
+   eq_ref(plotluck(movies, rating~mpaa, opts=plotluck.options(min.points.violin=1E20, dedupe.scatter='jitter')))
 
    # implicit conversion of binary variables
-   eq_ref(plotluck(budget~Documentary, movies))
+   eq_ref(plotluck(movies, budget~Documentary))
 
 })
 
@@ -144,63 +144,63 @@ test_that_ref("2d_box", "2D box/violin plot", {
 test_that_ref("2d_id", "2D identity bar", {
    # identity bar
    df <- data.frame(f=factor(c('aaaaaaa','bbbbbbbbb','ccccccccc','dddddddd')), val=c(5,6,2,8))
-   eq_ref(plotluck(val~f, df))
+   eq_ref(plotluck(df, val~f))
 })
 
 
 test_that_ref("2d_spine", "2D spine", {
 
    # spine plot
-   eq_ref(plotluck(Survived~Class, as.data.frame(Titanic), weights=Freq))
+   eq_ref(plotluck(as.data.frame(Titanic), Survived~Class, weights=Freq))
 
    df <- as.data.frame(occupationalStatus)
    df$origin <- ordered(df$origin)
    df$destination <- ordered(df$destination)
-   eq_ref(plotluck(destination~origin, df, weights=Freq))
+   eq_ref(plotluck(df, destination~origin, weights=Freq))
 })
 
 test_that_ref("3d_identity", "3D identity", {
    df <- data.frame(f=factor(c('aaaaaaa','bbbbbbbbb','ccccccccc','dddddddd')),
                     f2=factor(c(1,1,2,2)), val=c(5,6,2,8))
-   eq_ref(plotluck(val~f|f2, df))
+   eq_ref(plotluck(df, val~f|f2))
 
-   eq_ref(plotluck(val~f|f2, df, opts=plotluck.options(max.factor.levels.color=0)))
+   eq_ref(plotluck(df, val~f|f2, opts=plotluck.options(max.factor.levels.color=0)))
 })
 
 test_that_ref("3d_heat", "3D heat map", {
-   eq_ref(plotluck(price~cut+color, diamonds))
+   eq_ref(plotluck(diamonds, price~cut+color))
 })
 
 
 test_that_ref("3d_spine", "3D spine", {
-   eq_ref(plotluck(Survived~Class+Sex, as.data.frame(Titanic), weights=Freq))
+   eq_ref(plotluck(as.data.frame(Titanic), Survived~Class+Sex, weights=Freq))
 })
 
 
 test_that_ref("3d_scatter", "3D scatter", {
    # using hex, facets
-   eq_ref(plotluck( rating~length|mpaa, movies))
+   eq_ref(plotluck(movies, rating~length|mpaa))
 
    # using scatter, facets
-   eq_ref(plotluck( rating~length|mpaa, movies,
+   eq_ref(plotluck(movies, rating~length|mpaa,
                    opts=plotluck.options(min.points.hex=1E20)))
 
    # using colors
-   eq_ref(plotluck(Petal.Width~Petal.Length|Species, iris))
+   eq_ref(plotluck(iris, Petal.Width~Petal.Length|Species))
 })
 
 
 
 test_that_ref("3d_density", "3D density", {
    # density, facets
-   eq_ref(plotluck(price~1|cut+color, diamonds))
+   eq_ref(plotluck(diamonds, price~1|cut+color))
 
    # scatter, facets
-   eq_ref(plotluck(price~1|cut+color, diamonds,
+   eq_ref(plotluck(diamonds, price~1|cut+color,
                    opts=plotluck.options(min.points.density=1E20)))
 
    # colors
-   eq_ref(plotluck(price~1|cut, diamonds,
+   eq_ref(plotluck(diamonds, price~1|cut,
                    opts=plotluck.options(max.factor.levels.color=1E20)))
 })
 
@@ -208,28 +208,28 @@ test_that_ref("3d_density", "3D density", {
 
 test_that_ref("3d_violin", "3D violin", {
    # color
-   eq_ref(plotluck(rating~mpaa|Action, movies))
+   eq_ref(plotluck(movies, rating~mpaa|Action))
 
    # facets
-   eq_ref(plotluck(rating~mpaa|Action, movies,
+   eq_ref(plotluck(movies, rating~mpaa|Action,
                    opts=plotluck.options(max.factor.levels.color=0)))
 
    # scatter, color
-   eq_ref(plotluck(rating~mpaa|Action, movies,
+   eq_ref(plotluck(movies, rating~mpaa|Action,
                    opts=plotluck.options(min.points.violin=1E20)))
 
    # scatter, color, jitter
-   eq_ref(plotluck(rating~mpaa|Action, movies,
+   eq_ref(plotluck(movies, rating~mpaa|Action,
                    opts=plotluck.options(min.points.violin=1E20, dedupe.scatter='jitter')))
 
    # scatter, facets
-   eq_ref(plotluck(rating~mpaa|Action, movies,
+   eq_ref(plotluck(movies, rating~mpaa|Action,
                    opts=plotluck.options(min.points.violin=1E20, max.factor.levels.color=0)))
 })
 
 
 test_that_ref("3d_spine", "3D spine", {
-   eq_ref(plotluck(Survived~Class+Sex, as.data.frame(Titanic), weights=Freq))
+   eq_ref(plotluck(as.data.frame(Titanic), Survived~Class+Sex, weights=Freq))
 })
 
 
@@ -240,14 +240,14 @@ test_that_ref("missing", "missing values", {
                   v=runif(20),
                   v2=runif(20))
    df$v2[c(1,5,6)] <- NA
-   eq_ref(plotluck(v~f, df))
-   eq_ref(plotluck(v~f, df, opts=plotluck.options(na.rm=TRUE)))
-   eq_ref(plotluck(v~f, df, opts=plotluck.options(min.points.violin=0)))
-   eq_ref(plotluck(v~f, df, opts=plotluck.options(min.points.violin=0, na.rm=TRUE)))
-   eq_ref(plotluck(f~v, df))
-   eq_ref(plotluck(v2~v|f, df))
-   eq_ref(plotluck(f2~f, df))
-   eq_ref(plotluck(f2~f, df, opts=plotluck.options(na.rm=TRUE)))
+   eq_ref(plotluck(df, v~f))
+   eq_ref(plotluck(df, v~f, opts=plotluck.options(na.rm=TRUE)))
+   eq_ref(plotluck(df, v~f, opts=plotluck.options(min.points.violin=0)))
+   eq_ref(plotluck(df, v~f, opts=plotluck.options(min.points.violin=0, na.rm=TRUE)))
+   eq_ref(plotluck(df, f~v))
+   eq_ref(plotluck(df, v2~v|f))
+   eq_ref(plotluck(df, f2~f))
+   eq_ref(plotluck(df, f2~f, opts=plotluck.options(na.rm=TRUE)))
 })
 
 test_that_ref("2d_weight", "instance weights", {
@@ -258,25 +258,25 @@ test_that_ref("2d_weight", "instance weights", {
    df$w<-runif(20) + ifelse(df$v1>0.6, 3 * runif(20), ifelse(df$v1>0.3, 2*runif(20), 0))
 
    # num/num scatter
-   eq_ref(plotluck(v1~v2, df))
-   eq_ref(plotluck(v1~v2, df, weights=w))
+   eq_ref(plotluck(df, v1~v2))
+   eq_ref(plotluck(df, v1~v2, weights=w))
 
    # violin
-   eq_ref(plotluck(v1~f, df, opts=plotluck.options(geom='violin')))
-   eq_ref(plotluck(v1~f, df, weights=w, opts=plotluck.options(geom='violin')))
+   eq_ref(plotluck(df, v1~f, opts=plotluck.options(geom='violin')))
+   eq_ref(plotluck(df, v1~f, weights=w, opts=plotluck.options(geom='violin')))
 
    # box
-   eq_ref(plotluck(v1~f, df, opts=plotluck.options(geom='box')))
-   eq_ref(plotluck(v1~f, df, weights=w, opts=plotluck.options(geom='box')))
+   eq_ref(plotluck(df, v1~f, opts=plotluck.options(geom='box')))
+   eq_ref(plotluck(df, v1~f, weights=w, opts=plotluck.options(geom='box')))
 
    # density
-   eq_ref(plotluck(v1~1, df, opts=plotluck.options(min.points.density=0)))
-   eq_ref(plotluck(v1~1, df, weights=w, opts=plotluck.options(min.points.density=0)))
+   eq_ref(plotluck(df, v1~1, opts=plotluck.options(min.points.density=0)))
+   eq_ref(plotluck(df, v1~1, weights=w, opts=plotluck.options(min.points.density=0)))
 
    # histogram
-   eq_ref(plotluck(v1~1, df,
+   eq_ref(plotluck(df, v1~1,
                    opts=plotluck.options(geom='histogram')))
-   eq_ref(plotluck(v1~1, df, weights=w,
+   eq_ref(plotluck(df, v1~1, weights=w,
                    opts=plotluck.options(geom='histogram')))
 
    # heat map/spine
@@ -284,8 +284,8 @@ test_that_ref("2d_weight", "instance weights", {
    df <- rbind(df, df, df)
    df$v <- runif(75)
    df$w<-runif(75) + ifelse(df$v>0.6, 10 * runif(75), ifelse(df$v>0.3, 5*runif(75), 0))
-   eq_ref(plotluck(v~Var1+Var2, df, opts=plotluck.options(geom='spine')))
-   eq_ref(plotluck(v~Var1+Var2, df, weights=w, opts=plotluck.options(geom='spine')))
+   eq_ref(plotluck(df, v~Var1+Var2, opts=plotluck.options(geom='spine')))
+   eq_ref(plotluck(df, v~Var1+Var2, weights=w, opts=plotluck.options(geom='spine')))
 
 })
 
@@ -293,9 +293,9 @@ test_that_ref("multi", "multiple plots", {
 
    #testthat::skip_on_cran()
    if (identical(Sys.getenv("NOT_CRAN"), "true")) {
-      eq_ref(plotluck(.~1, diamonds))
-      eq_ref(plotluck(price~., diamonds))
-      eq_ref(plotluck(.~price, diamonds))
+      eq_ref(plotluck(diamonds, .~1))
+      eq_ref(plotluck(diamonds, price~.))
+      eq_ref(plotluck(diamonds, .~price))
    }
 
 })

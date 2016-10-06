@@ -42,7 +42,7 @@ As we see, `ggplot2` makes it quite easy to create a plot. However, we still hav
 
 ```{r, fig.show='hold'}
 library(plotluck)
-plotluck(Petal.Width~Petal.Length|Species, iris)
+plotluck(iris, Petal.Width~Petal.Length|Species)
 ```
 
 Admittedly in this simple example there is not a lot of reduction in the amount
@@ -72,7 +72,7 @@ in the data set":
 
 ```{r, fig.show='hold'}
 library(gapminder)
-plotluck(.~1, gapminder)
+plotluck(gapminder, .~1)
 ```
 
 In this grid view, each distribution is represented with a minimal thumbnail picture, but we get a general sense of the data. There are 2 categorical and 4 continuous variables; the amount of data is uniform for a range of years; one continent has very few, another one very many rows; `pop` and `gdpPercap` have very skewed distributions, so a log-transform has been applied.
@@ -81,20 +81,20 @@ Say we are now interested in explanatory variables for target `lifeExp`. It seem
 
 ```{r, fig.show='hold', warning=FALSE}
 opts <- plotluck.options(verbose=TRUE)
-plotluck(lifeExp~., weights=pop, data=gapminder, opts=opts)
+plotluck(gapminder, lifeExp~., weights=pop, opts=opts)
 ```
 
 As can be seen from the printout, conditional entropies are estimated for ordering the plot (lower values indicate stronger informational value). From the overview, we see a clear correlation of `lifeExp` with `gdpPercap`, `year`, and `continent`. Lets zoom in on the latter:
 
 
 ```{r, fig.show='hold', warning=FALSE}
-plotluck(lifeExp~continent, weights=pop, data=gapminder, opts=opts)
+plotluck(gapminder, lifeExp~continent, weights=pop, opts=opts)
 ```
 
 The continents are ordered by median `lifeExp`, fom Africa to Oceania. The spread is also largest for Africa. Which countries are actually accounted for per continent?
 
 ```{r, fig.show='hold'}
-plotluck(lifeExp~continent+country, weights=pop, data=gapminder, opts=opts)
+plotluck(gapminder, lifeExp~continent+country, weights=pop, opts=opts)
 ```
 
 Note how in the resulting heat map, rectangles are scaled according to population - this makes China and India stand out.
@@ -102,14 +102,14 @@ Note how in the resulting heat map, rectangles are scaled according to populatio
 Another typical question is, how have the distributions changed over time?
 
 ```{r, fig.show='hold'}
-plotluck(lifeExp~year|continent, weights=pop, data=gapminder, opts=opts)
+plotluck(gapminder, lifeExp~year|continent, weights=pop, opts=opts)
 ```
 
 It is also possible (and can sometimes be fun) to produce _random_ visualizations from a dataset:
 
 ```{r, fig.show='hold'}
 set.seed(6)
-sample.plotluck(gapminder,weights=pop,opts)
+sample.plotluck(gapminder, weights=pop, opts)
 ```
 
 ## Heuristics for Choosing the Plot Type

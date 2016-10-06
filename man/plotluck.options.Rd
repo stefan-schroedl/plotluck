@@ -72,10 +72,10 @@ plotluck.options()
 
 data(iris)
 # default with violin plot
-plotluck(Petal.Length~Species, iris)
+plotluck(iris, Petal.Length~Species)
 
 # use box-and-whiskers plot instead
-plotluck(Petal.Length~Species, iris, opts=plotluck.options(geom='box'))
+plotluck(iris, Petal.Length~Species, opts=plotluck.options(geom='box'))
 
 }
 \seealso{
