@@ -1,5 +1,9 @@
-# plotluck 1.0.0
+# plotluck 1.1.0
+* Compatibility with ggplot 2.2.0
+* Swap order of data and formula arguments, as requested
 
+# plotluck 1.0.0 (2016-09-22)
+* First CRAN release
 * Compatibility with ggplot 2.1.0
 * Changed _plotluck()_ arguments to use a formula instead of arguments _x,y,z_
 * Removed _plotluck.multi()_ from being public - functionality can now be accessed using dot symbol _'.'_ in plotluck formula

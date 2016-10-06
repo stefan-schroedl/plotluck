@@ -467,6 +467,7 @@ discretize.few.unique <- function(data, x, few.unique.as.factor=5, verbose=FALSE
     return(data)
   }
   non.na <- !is.na(data[[x]])
+  # works for both data frames and tibbles
   u <- nrow(unique(data[non.na,x,drop=FALSE]))
 
   if (u <= few.unique.as.factor &&
@@ -2722,14 +2723,11 @@ format.facets <- function(data, x, show.var='first') {
 add.facet.wrap <- function(p, data, cond, preferred.order, opts) {
   nrow <- NULL
   ncol <- NULL
-  strip.position <- NULL
   show.var <- 'first'
   if (preferred.order == 'row') {
     ncol <- opts$facet.max.cols
-    strip.position <- 'bottom'
   } else if (preferred.order == 'col') {
     nrow <- opts$facet.max.rows
-    strip.position <- 'left'
     show.var <- 'last'
   }
   facet.labels <- format.facets(data, cond, show.var)
@@ -2737,7 +2735,7 @@ add.facet.wrap <- function(p, data, cond, preferred.order, opts) {
   p <- p + theme_slanted_text_x +  # axis text might overlap in small diagrams
     facet_wrap(cond,
                labeller=as_labeller(facet.labels),
-               nrow=nrow, ncol=ncol, strip.position=strip.position) +
+               nrow=nrow, ncol=ncol) +
     theme(panel.border=element_rect(fill=NA))
   # known issue 1: always slanting text is not ideal, but no quick fix
   # known issue 2: for it would be good to order vertical facets like axis

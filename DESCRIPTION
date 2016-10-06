@@ -1,6 +1,6 @@
 Package: plotluck
 Title: 'ggplot2' Version of "I'm Feeling Lucky!"
-Version: 1.0.0.9000
+Version: 1.1.0
 Authors@R: person("Stefan", "Schroedl", , "stefan.schroedl@gmx.de", c("aut", "cre"))
 Description: Examines the characteristics of a data frame and a formula to
     automatically choose the most suitable type of plot out of the following supported
@@ -11,16 +11,16 @@ Description: Examines the characteristics of a data frame and a formula to
     factor levels, and overlaying smoothing curves and median lines. Plots are
     drawn using 'ggplot2'.
 Depends:
-    R (>= 3.3.1)
+    R (>= 3.1)
 Imports:
-    ggplot2 (>= 2.1.0),
+    grid,
     Hmisc (>= 3.17.4),
     quantreg (>= 5.26),
-    scales (>= 0.4.0),
+    scales (>= 0.4.1),
     plyr (>= 1.8.4),
-    grid (>= 3.3.1),
     hexbin (>= 1.27.1),
-    RColorBrewer (>= 1.1.2)
+    RColorBrewer (>= 1.1.2),
+    ggplot2 (>= 2.2.0)
 License: MIT + file LICENSE
 URL: https://github.com/stefan-schroedl/plotluck
 BugReports: https://github.com/stefan-schroedl/plotluck/issues

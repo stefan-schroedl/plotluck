@@ -30,8 +30,8 @@ Imagine you have given a new R data frame, and would like to get an overview of 
 
 ```r
 library(plotluck)
-data(diamonds,package='ggplot2')
-plotluck(price~cut+color, diamonds)
+data(diamonds, package='ggplot2')
+plotluck(diamonds, price~cut+color)
 ```
 
 ![plot of chunk unnamed-chunk-2](README-unnamed-chunk-2-1.png)
