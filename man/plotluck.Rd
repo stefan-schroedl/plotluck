@@ -237,6 +237,7 @@ curves or median lines.
  Parallel plots with variables on different scales (such as time
  series of multiple related signals) are not supported.
 }
+
 \examples{
 # Single-variable density
 data(diamonds, package='ggplot2')
@@ -280,42 +281,22 @@ plotluck(iris, Species~.)
 \seealso{
 \code{\link{plotluck.options}}, \code{\link{sample.plotluck}}, \code{\link[ggplot2]{ggplot}}
 }
-\concept{
-automation
-
-visualization
-
-plotting
-
-exploratory data analysis
-
-ggplot
-
-ggplot2
-
-heat map
-
-density plot
-
-violin plot
-
-hexbin
-
-histogram
-
-bar plot
-
-box plot
-
-spine plot
-
-mosaic plot
-
-scatter plot
-
-heat map
-}
-\keyword{aplot,}
+\concept{automation}
+\concept{bar plot}
+\concept{box plot}
+\concept{density plot}
+\concept{exploratory data analysis}
+\concept{ggplot}
+\concept{ggplot2}
+\concept{heat map}
+\concept{hexbin}
+\concept{histogram}
+\concept{mosaic plot}
+\concept{plotting}
+\concept{scatter plot}
+\concept{spine plot}
+\concept{violin plot}
+\concept{visualization}
+\keyword{aplot}
 \keyword{dplot}
-\keyword{hplot,}
-
+\keyword{hplot}

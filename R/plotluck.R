@@ -1986,7 +1986,7 @@ parse.formula <- function(form) {
 
 # try to match user input to column names, if not exact
 correct.varnames <- function(x, data) {
-  if (length(x) == 0 || x == '.') {
+  if (length(x) == 0 || length(x) == 1 && x == '.') {
     return(x)
   }
   for (i in seq(length(x))) {
@@ -2069,7 +2069,9 @@ info.threshold <- function(cond, msg, threshold, ...) {
 #' @param ... additional parameters to be passed to the respective ggplot2 geom objects.
 #' @return a ggplot object, or a plotluck.multi object if the dot symbol was used.
 #' @export
-#' @keywords hplot, aplot, dplot
+#' @keywords hplot
+#' @keywords aplot
+#' @keywords dplot
 #' @concept automation
 #' @concept visualization
 #' @concept plotting

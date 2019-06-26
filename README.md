@@ -28,13 +28,14 @@ Imagine you have given a new R data frame, and would like to get an overview of 
 ## Example
 
 
+
 ```r
 library(plotluck)
 data(diamonds, package='ggplot2')
 plotluck(diamonds, price~cut+color)
 ```
 
-![plot of chunk unnamed-chunk-2](README-unnamed-chunk-2-1.png)
+![plot of chunk unnamed-chunk-2](inst/image/README-unnamed-chunk-2-1.png)
 
 ## Features
 
@@ -59,3 +60,4 @@ plotluck(diamonds, price~cut+color)
 You can find more examples under `tests/testthat/test_plotluck.R.`
 
 More background is given in the [vignette](http://htmlpreview.github.io/?https://github.com/stefan-schroedl/plotluck/blob/master/inst/doc/plotluck.html).
+

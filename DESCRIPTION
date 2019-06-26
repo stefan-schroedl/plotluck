@@ -1,6 +1,6 @@
 Package: plotluck
 Title: 'ggplot2' Version of "I'm Feeling Lucky!"
-Version: 1.1.0
+Version: 1.1.1
 Authors@R: person("Stefan", "Schroedl", , "stefan.schroedl@gmx.de", c("aut", "cre"))
 Description: Examines the characteristics of a data frame and a formula to
     automatically choose the most suitable type of plot out of the following supported
@@ -33,5 +33,5 @@ Suggests:
     knitr,
     rmarkdown,
     gapminder
-RoxygenNote: 5.0.1
+RoxygenNote: 6.1.1
 VignetteBuilder: knitr

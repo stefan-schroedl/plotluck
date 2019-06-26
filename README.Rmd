@@ -5,7 +5,7 @@
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
-  fig.path = "README-"
+  fig.path = "inst/image/README-" # note: iamge at top level gives note "non-standard file"; make sure image is not excluded in .Rbuildignore!!!
 )
 ```
 
@@ -32,6 +32,7 @@ Imagine you have given a new R data frame, and would like to get an overview of 
 `Plotluck` is a tool for exploratory data visualization in R that automates such steps. It creates complete graphics based on `ggplot`; the only things that have to be specified are the data frame, a formula, and optionally a weight column.
 
 ## Example
+
 
 ```{r, fig.show='hold'}
 library(plotluck)
@@ -62,3 +63,4 @@ plotluck(diamonds, price~cut+color)
 You can find more examples under `tests/testthat/test_plotluck.R.`
 
 More background is given in the [vignette](http://htmlpreview.github.io/?https://github.com/stefan-schroedl/plotluck/blob/master/inst/doc/plotluck.html).
+

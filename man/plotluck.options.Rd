@@ -81,4 +81,3 @@ plotluck(iris, Petal.Length~Species, opts=plotluck.options(geom='box'))
 \seealso{
 \code{\link{plotluck}}
 }
-

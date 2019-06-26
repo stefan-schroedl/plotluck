@@ -31,4 +31,3 @@ sample.plotluck(iris)
 \seealso{
 \code{\link{plotluck}}
 }
-

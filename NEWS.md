@@ -1,3 +1,8 @@
+# plotluck 1.1.1
+* Rerun roxygen2 for documentation format compliance
+* Move example image in readme file to avoid warning
+* No functional change
+
 # plotluck 1.1.0
 * Compatibility with ggplot 2.2.0
 * Swap order of data and formula arguments, as requested
@@ -21,9 +26,7 @@
 * Several bug fixes
 
 # plotluck 0.1.1
-
 * Bug fix for scatter plots
 
 # plotluck 0.1.0
-
-* Inital Release
+* Initial Release
