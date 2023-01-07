@@ -888,7 +888,7 @@ add.color.legend <- function(p, data, x, aesth=c('color','fill')) {
     if (aesth == 'color') {
       p <- p + guides(color=guide_colorbar(direction='vertical'), fill=FALSE)
     } else {
-      p <- p + guides(fill=guide_colorbar(direction='vertical'), color=FALSE)
+      p <- p + guides(fill=guide_colorbar(direction='vertical'), color='none')
     }
     p <-  p + theme(legend.position='right', legend.background=element_blank())
     return(p)
@@ -926,7 +926,7 @@ add.color.legend <- function(p, data, x, aesth=c('color','fill')) {
                                          reverse=TRUE, ncol=ncol.vert), fill=FALSE)
     } else {
       p <- p + guides(fill=guide_legend(direction='vertical', byrow=FALSE,
-                                        reverse=TRUE, ncol=ncol.vert), color=FALSE)
+                                        reverse=TRUE, ncol=ncol.vert), color='none')
     }
     p + theme(legend.position='right', legend.background=element_blank())
   } else {
@@ -936,7 +936,7 @@ add.color.legend <- function(p, data, x, aesth=c('color','fill')) {
                                          reverse=FALSE, nrow=nrow.horz), fill=FALSE)
     } else {
       p <- p + guides(fill=guide_legend(direction='horizontal', byrow=TRUE,
-                                        reverse=FALSE, nrow=nrow.horz), color=FALSE)
+                                        reverse=FALSE, nrow=nrow.horz), color='none')
     }
     p + theme(legend.position='bottom', legend.background=element_blank())
   }
@@ -1540,7 +1540,7 @@ gplt.density <- function(data, x, w='NULL',
    }
 
    p <- ggplot(data, aes_string(x=x, weight=w)) +
-      geom_density(aes_(y = ~after_stat(scaled)), alpha = 0.6, adjust = 0.5, trim = TRUE, na.rm = TRUE, ...) +
+      geom_density(aes_(y=~after_stat(scaled)), alpha=0.6, adjust=0.5, trim=TRUE, na.rm=TRUE, ...) +
       geom_rug(na.rm=TRUE)
       # unfortunately the following does not work for log transformation -
       # the layer received the transformed data + geom_vline_center()
