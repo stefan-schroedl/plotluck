@@ -886,7 +886,7 @@ add.color.legend <- function(p, data, x, aesth=c('color','fill')) {
   if (is.numeric(data[[x]])) {
     # color bars always on the right margin, to avoid number label overwriting
     if (aesth == 'color') {
-      p <- p + guides(color=guide_colorbar(direction='vertical'), fill=FALSE)
+      p <- p + guides(color=guide_colorbar(direction='vertical'), fill='none')
     } else {
       p <- p + guides(fill=guide_colorbar(direction='vertical'), color='none')
     }
@@ -923,7 +923,7 @@ add.color.legend <- function(p, data, x, aesth=c('color','fill')) {
     # vertical - by column, starting with first level at the bottom
     if (aesth == 'color') {
       p <- p + guides(color=guide_legend(direction='vertical', byrow=FALSE,
-                                         reverse=TRUE, ncol=ncol.vert), fill=FALSE)
+                                         reverse=TRUE, ncol=ncol.vert), fill='none')
     } else {
       p <- p + guides(fill=guide_legend(direction='vertical', byrow=FALSE,
                                         reverse=TRUE, ncol=ncol.vert), color='none')
@@ -933,7 +933,7 @@ add.color.legend <- function(p, data, x, aesth=c('color','fill')) {
     # horizontal - by row
     if (aesth == 'color') {
       p <- p + guides(color=guide_legend(direction='horizontal', byrow=TRUE,
-                                         reverse=FALSE, nrow=nrow.horz), fill=FALSE)
+                                         reverse=FALSE, nrow=nrow.horz), fill='none')
     } else {
       p <- p + guides(fill=guide_legend(direction='horizontal', byrow=TRUE,
                                         reverse=FALSE, nrow=nrow.horz), color='none')
