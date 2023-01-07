@@ -1130,7 +1130,7 @@ gplt.scatter <- function(data, x, y, w='NULL',
     # use point size to represent count/weight
     p <- p + geom_point(aes_string(size=w), alpha=alpha,
                         position=pos, na.rm=TRUE, ...) +
-      scale_size(guide=FALSE)
+      scale_size(guide='none')
   } else {
     # use jittering
     if (max(table(data[, c(x, y)], useNA='ifany')) >= min.points.jitter) {
@@ -1215,7 +1215,7 @@ gplt.hex <- function(data, x, y, w='NULL', trans.log.thresh=2,
 
   p <- p +
     # log scaling of color often reveals more details
-    scale_fill_gradientn(colors=c(hcl(66,60,95), hcl(128,100,45)), trans='log', guide=FALSE) +
+    scale_fill_gradientn(colors=c(hcl(66,60,95), hcl(128,100,45)), trans='log', guide='none') +
     theme(legend.position='right') +
     theme_panel_num_x + theme_panel_num_y
 
@@ -1540,7 +1540,7 @@ gplt.density <- function(data, x, w='NULL',
    }
 
    p <- ggplot(data, aes_string(x=x, weight=w)) +
-      geom_density(aes_(y=~..scaled..), alpha=0.6, adjust=0.5, trim=TRUE, na.rm=TRUE, ...) +
+      geom_density(aes_(y = ~after_stat(scaled)), alpha = 0.6, adjust = 0.5, trim = TRUE, na.rm = TRUE, ...) +
       geom_rug(na.rm=TRUE)
       # unfortunately the following does not work for log transformation -
       # the layer received the transformed data + geom_vline_center()
@@ -2774,7 +2774,7 @@ redundant.factor.color <- function(p, data, response, indep, type.plot, opts) {
     p <- add.color.fill(p, data, fac,
                         palette.brewer.seq=opts$palette.brewer.seq,
                         palette.brewer.qual=opts$palette.brewer.qual)  +
-      guides(fill=FALSE, color=FALSE)
+      guides(fill='none', color='none')
 
     return (p)
   } else if (type.plot %in% c('density', 'histogram')) {
@@ -2783,7 +2783,7 @@ redundant.factor.color <- function(p, data, response, indep, type.plot, opts) {
       aes(color='something') +
       scale_fill_manual(values=opts$fill.default) +
       scale_color_manual(values=opts$fill.default) +
-      guides(fill=FALSE, color=FALSE)
+      guides(fill='none', color='none')
   } else {
     p
   }
