@@ -1927,22 +1927,22 @@ sample.data <- function(data, w='NULL', max.rows) {
 # expected input formula: 'x', 'x*y', 'x+y', 'x+1'
 # output: list of occurring variables, ignoring constants
 parse.formula.term <- function(form) {
-  if (class(form) == 'numeric') {
+  if (inherits(form, 'numeric')) {
     return(character())
   }
-  if (class(form) == 'name') {
+  if (inherits(form, 'name')) {
     return(as.character(form))
   }
   if (as.character(form[[1]]) %in% c('+', '*')) {
     res <- character()
-    if (class(form[[2]]) == 'name') {
+    if (inherits(form[[2]], 'name')) {
       res <- as.character(form[[2]])
-    } else if (class(form[[2]]) != 'numeric') {
+    } else if (!inherits(form[[2]], 'numeric')) {
       stop('Invalid formula: at most two dependent or conditional variables allowed')
     }
-    if (class(form[[3]]) == 'name') {
+    if (inherits(form[[3]], 'name')) {
       res <- c(res, as.character(form[[3]]))
-    } else if (class(form[[3]]) != 'numeric') {
+    } else if (!inherits(form[[3]], 'numeric')) {
       stop('Invalid formula: at most two dependent or conditional variables allowed')
     }
     return(res)
@@ -1957,7 +1957,7 @@ parse.formula <- function(form) {
     stop('Invalid formula')
   }
   node <- form[[2]]
-  if (class(node) != 'name') {
+  if (!inherits(node,'name')) {
     stop('Invalid formula: only one dependent variable allowed')
   }
   resp <- as.character(node)
@@ -1965,7 +1965,7 @@ parse.formula <- function(form) {
   cond <- character()
 
   node <- form[[3]]
-  if (class(node) != 'name' && as.character(node[[1]])  == '|') {
+  if (!inherits(node,'name') && as.character(node[[1]])  == '|') {
     indep <- parse.formula.term(node[[2]])
     cond <- parse.formula.term(node[[3]])
   } else {

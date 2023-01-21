@@ -1,7 +1,10 @@
 Package: plotluck
 Title: 'ggplot2' Version of "I'm Feeling Lucky!"
-Version: 1.1.1
-Authors@R: person("Stefan", "Schroedl", , "stefan.schroedl@gmx.de", c("aut", "cre"))
+Version: 1.1.1.9000
+Authors@R: c(
+   person("Stefan", "Schroedl", , "stefan.schroedl@gmx.de", c("aut", "cre")),
+   person(given = "Christophe", family = "Regouby", email = "christophe.regouby@free.fr", role = c("ctb"))
+           )
 Description: Examines the characteristics of a data frame and a formula to
     automatically choose the most suitable type of plot out of the following supported
     options: scatter, violin, box, bar, density, hexagon bin, spine plot, and
@@ -15,12 +18,10 @@ Depends:
 Imports:
     grid,
     Hmisc (>= 3.17.4),
-    quantreg (>= 5.26),
     scales (>= 0.4.1),
     plyr (>= 1.8.4),
-    hexbin (>= 1.27.1),
     RColorBrewer (>= 1.1.2),
-    ggplot2 (>= 2.2.0)
+    ggplot2 (>= 3.4.0)
 License: MIT + file LICENSE
 URL: https://github.com/stefan-schroedl/plotluck
 BugReports: https://github.com/stefan-schroedl/plotluck/issues
