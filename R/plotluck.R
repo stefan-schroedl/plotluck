@@ -886,9 +886,9 @@ add.color.legend <- function(p, data, x, aesth=c('color','fill')) {
   if (is.numeric(data[[x]])) {
     # color bars always on the right margin, to avoid number label overwriting
     if (aesth == 'color') {
-      p <- p + guides(color=guide_colorbar(direction='vertical'), fill=FALSE)
+      p <- p + guides(color=guide_colorbar(direction='vertical'), fill='none')
     } else {
-      p <- p + guides(fill=guide_colorbar(direction='vertical'), color=FALSE)
+      p <- p + guides(fill=guide_colorbar(direction='vertical'), color='none')
     }
     p <-  p + theme(legend.position='right', legend.background=element_blank())
     return(p)
@@ -923,20 +923,20 @@ add.color.legend <- function(p, data, x, aesth=c('color','fill')) {
     # vertical - by column, starting with first level at the bottom
     if (aesth == 'color') {
       p <- p + guides(color=guide_legend(direction='vertical', byrow=FALSE,
-                                         reverse=TRUE, ncol=ncol.vert), fill=FALSE)
+                                         reverse=TRUE, ncol=ncol.vert), fill='none')
     } else {
       p <- p + guides(fill=guide_legend(direction='vertical', byrow=FALSE,
-                                        reverse=TRUE, ncol=ncol.vert), color=FALSE)
+                                        reverse=TRUE, ncol=ncol.vert), color='none')
     }
     p + theme(legend.position='right', legend.background=element_blank())
   } else {
     # horizontal - by row
     if (aesth == 'color') {
       p <- p + guides(color=guide_legend(direction='horizontal', byrow=TRUE,
-                                         reverse=FALSE, nrow=nrow.horz), fill=FALSE)
+                                         reverse=FALSE, nrow=nrow.horz), fill='none')
     } else {
       p <- p + guides(fill=guide_legend(direction='horizontal', byrow=TRUE,
-                                        reverse=FALSE, nrow=nrow.horz), color=FALSE)
+                                        reverse=FALSE, nrow=nrow.horz), color='none')
     }
     p + theme(legend.position='bottom', legend.background=element_blank())
   }
@@ -1130,7 +1130,7 @@ gplt.scatter <- function(data, x, y, w='NULL',
     # use point size to represent count/weight
     p <- p + geom_point(aes_string(size=w), alpha=alpha,
                         position=pos, na.rm=TRUE, ...) +
-      scale_size(guide=FALSE)
+      scale_size(guide='none')
   } else {
     # use jittering
     if (max(table(data[, c(x, y)], useNA='ifany')) >= min.points.jitter) {
@@ -1215,7 +1215,7 @@ gplt.hex <- function(data, x, y, w='NULL', trans.log.thresh=2,
 
   p <- p +
     # log scaling of color often reveals more details
-    scale_fill_gradientn(colors=c(hcl(66,60,95), hcl(128,100,45)), trans='log', guide=FALSE) +
+    scale_fill_gradientn(colors=c(hcl(66,60,95), hcl(128,100,45)), trans='log', guide='none') +
     theme(legend.position='right') +
     theme_panel_num_x + theme_panel_num_y
 
@@ -1540,7 +1540,7 @@ gplt.density <- function(data, x, w='NULL',
    }
 
    p <- ggplot(data, aes_string(x=x, weight=w)) +
-      geom_density(aes_(y=~..scaled..), alpha=0.6, adjust=0.5, trim=TRUE, na.rm=TRUE, ...) +
+      geom_density(aes_(y=~after_stat(scaled)), alpha=0.6, adjust=0.5, trim=TRUE, na.rm=TRUE, ...) +
       geom_rug(na.rm=TRUE)
       # unfortunately the following does not work for log transformation -
       # the layer received the transformed data + geom_vline_center()
@@ -1927,22 +1927,22 @@ sample.data <- function(data, w='NULL', max.rows) {
 # expected input formula: 'x', 'x*y', 'x+y', 'x+1'
 # output: list of occurring variables, ignoring constants
 parse.formula.term <- function(form) {
-  if (class(form) == 'numeric') {
+  if (inherits(form, 'numeric')) {
     return(character())
   }
-  if (class(form) == 'name') {
+  if (inherits(form, 'name')) {
     return(as.character(form))
   }
   if (as.character(form[[1]]) %in% c('+', '*')) {
     res <- character()
-    if (class(form[[2]]) == 'name') {
+    if (inherits(form[[2]], 'name')) {
       res <- as.character(form[[2]])
-    } else if (class(form[[2]]) != 'numeric') {
+    } else if (!inherits(form[[2]], 'numeric')) {
       stop('Invalid formula: at most two dependent or conditional variables allowed')
     }
-    if (class(form[[3]]) == 'name') {
+    if (inherits(form[[3]], 'name')) {
       res <- c(res, as.character(form[[3]]))
-    } else if (class(form[[3]]) != 'numeric') {
+    } else if (!inherits(form[[3]], 'numeric')) {
       stop('Invalid formula: at most two dependent or conditional variables allowed')
     }
     return(res)
@@ -1957,7 +1957,7 @@ parse.formula <- function(form) {
     stop('Invalid formula')
   }
   node <- form[[2]]
-  if (class(node) != 'name') {
+  if (!inherits(node,'name')) {
     stop('Invalid formula: only one dependent variable allowed')
   }
   resp <- as.character(node)
@@ -1965,7 +1965,7 @@ parse.formula <- function(form) {
   cond <- character()
 
   node <- form[[3]]
-  if (class(node) != 'name' && as.character(node[[1]])  == '|') {
+  if (!inherits(node,'name') && as.character(node[[1]])  == '|') {
     indep <- parse.formula.term(node[[2]])
     cond <- parse.formula.term(node[[3]])
   } else {
@@ -2774,7 +2774,7 @@ redundant.factor.color <- function(p, data, response, indep, type.plot, opts) {
     p <- add.color.fill(p, data, fac,
                         palette.brewer.seq=opts$palette.brewer.seq,
                         palette.brewer.qual=opts$palette.brewer.qual)  +
-      guides(fill=FALSE, color=FALSE)
+      guides(fill='none', color='none')
 
     return (p)
   } else if (type.plot %in% c('density', 'histogram')) {
@@ -2783,7 +2783,7 @@ redundant.factor.color <- function(p, data, response, indep, type.plot, opts) {
       aes(color='something') +
       scale_fill_manual(values=opts$fill.default) +
       scale_color_manual(values=opts$fill.default) +
-      guides(fill=FALSE, color=FALSE)
+      guides(fill='none', color='none')
   } else {
     p
   }
